@@ -30,9 +30,11 @@ actor RecordingSMBClient: SMBClientProtocol {
         credentials: SMBCredentials,
         conflictResolution: ConflictResolution,
         progress: @escaping @Sendable (Double) -> Void
-    ) async throws {
+    ) async throws -> String {
         progress(1.0)
+        return remotePath
     }
+
 }
 
 final class SettingsStoreE2ETests: XCTestCase {

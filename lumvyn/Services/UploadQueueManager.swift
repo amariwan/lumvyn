@@ -3,6 +3,7 @@ import os
 import Combine
 import Network
 import Photos
+import WidgetKit
 
 @MainActor
 final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
@@ -99,6 +100,32 @@ final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
                 Task { await self?.autoResumeProcessingIfNeeded() }
             }
             .store(in: &cancellables)
+
+        Publishers.CombineLatest(
+            $items.map { items -> Int in items.filter { $0.status == .pending || $0.status == .failed }.count },
+            $isProcessing
+        )
+        .removeDuplicates { $0 == $1 }
+        .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
+        .sink { [weak self] pending, syncing in
+            self?.writeWidgetState(pending: pending, isSyncing: syncing)
+        }
+        .store(in: &cancellables)
+    }
+
+    private func writeWidgetState(pending: Int, isSyncing: Bool) {
+        if let ud = UserDefaults(suiteName: WidgetShared.appGroup) {
+            ud.set(pending, forKey: WidgetShared.keyPending)
+            ud.set(isSyncing, forKey: WidgetShared.keyIsSyncing)
+        }
+        if #available(iOS 14.0, *) {
+            WidgetCenter.shared.reloadTimelines(ofKind: WidgetShared.kind)
+        }
+    }
+
+    private func recordSyncCompletion() {
+        let stamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .short)
+        UserDefaults(suiteName: WidgetShared.appGroup)?.set(stamp, forKey: WidgetShared.keyLastSyncText)
     }
 
     private var hasRetryableItems: Bool {
@@ -130,8 +157,6 @@ final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
         if settingsStore.autoUploadEnabled {
             await startIfNeeded()
         }
-        // In mirror mode, run a full diff + enqueue orphans; in backup mode only
-        // process any previously-queued deletions (e.g. from interrupted sessions).
         if settingsStore.syncMode == .mirror {
             await runMirrorSyncIfNeeded()
         } else {
@@ -150,9 +175,6 @@ final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
         pendingDeletionCount = await remoteDeletionQueue?.pendingCount() ?? 0
     }
 
-    /// Runs a full mirror-mode sync cycle.  Enqueues orphaned remote files for deletion,
-    /// then immediately processes the deletion queue so the server is updated without delay.
-    /// This is safe to call from background tasks or on network-reconnect.
     func runMirrorSyncIfNeeded() async {
         guard settingsStore.syncMode == .mirror else { return }
         guard let index = remoteIndex, let dq = remoteDeletionQueue else { return }
@@ -388,7 +410,10 @@ final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
 
     private func runUploadLoop() async {
         isProcessing = true
-        defer { isProcessing = false }
+        defer {
+            isProcessing = false
+            recordSyncCompletion()
+        }
 
         var successCount = 0
         var failureCount = 0
@@ -401,10 +426,6 @@ final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
 
             guard !batch.isEmpty else { break }
 
-            // Run uploads concurrently off the main actor. For each item capture a
-            // value-copy and relevant settings, then perform the heavy work in a
-            // concurrent task. Progress updates and state mutations are applied on
-            // the MainActor.
             await withTaskGroup(of: Bool.self) { group in
                 for item in batch {
                     let itemCopy = item
@@ -523,7 +544,7 @@ final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
                 credentials: credentials,
                 conflictResolution: settingsStore.config.conflictResolution
             ) { [weak self] progress in
-                DispatchQueue.main.async { [weak self] in
+                Task { @MainActor [weak self] in
                     self?.updateProgress(item.id, progress: progress)
                 }
             }
@@ -548,7 +569,6 @@ final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
                 item.retryCount = 0
                 return item
             }
-            // Persist mapping from local asset -> remote path to enable deletion sync
             if let index = remoteIndex {
                 let host = settingsStore.host
                 let sharePath = settingsStore.sharePath
@@ -648,10 +668,6 @@ final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
         return matches
     }
 
-    /// Directory within the share (share name stripped) that a newly uploaded
-    /// file should land in, after applying the user's folder template. Returns
-    /// an empty string when both the share subpath and the resolved template
-    /// produce no segments.
     private func remoteDirectory(for item: UploadItem) -> String {
         let normalized = settingsStore.sharePath
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -918,7 +934,7 @@ fileprivate func performBackgroundUpload(
         }
 
         let service = EncryptionService(password: key)
-        let data = try Data(contentsOf: exportURL)
+        let data = try await Task.detached(priority: .utility) { try Data(contentsOf: exportURL) }.value
         let encrypted = try service.encrypt(data)
         let outURL = context.cacheDirectory.appendingPathComponent("encrypted_\(exportURL.lastPathComponent)")
         try encrypted.write(to: outURL, options: [.atomic])

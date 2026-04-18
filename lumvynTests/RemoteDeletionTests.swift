@@ -53,12 +53,14 @@ final class RemoteDeletionTests: XCTestCase {
     func testRemoteDeletionQueue_processPending_removes_entry() async {
         let dq = RemoteDeletionQueue(fileName: "remote-deletion-queue-test.json")
         await dq.enqueue(localId: "a1", host: "h", sharePath: "/s", remotePath: "/s/f.jpg")
-        XCTAssertEqual(await dq.pendingCount(), 1)
+        let pendingBefore = await dq.pendingCount()
+        XCTAssertEqual(pendingBefore, 1)
 
         let client = RecordingSMBClient()
         let result = await dq.processPending(smbClient: client, credentials: nil, remoteIndex: nil)
 
-        XCTAssertEqual(await dq.pendingCount(), 0)
+        let pendingAfter = await dq.pendingCount()
+        XCTAssertEqual(pendingAfter, 0)
         XCTAssertEqual(client.deleted.count, 1)
         XCTAssertEqual(client.deleted.first?.remotePath, "/s/f.jpg")
         XCTAssertEqual(result.deleted, 1)

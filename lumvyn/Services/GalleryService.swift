@@ -198,7 +198,8 @@ final class GalleryService: @unchecked Sendable {
     func fullResolutionData(for asset: RemoteAsset, connection: GalleryConnection) async throws -> Data {
         let url = try await downloadFullResolution(for: asset, connection: connection)
         defer { try? FileManager.default.removeItem(at: url) }
-        return try Data(contentsOf: url)
+        let data = try await Task.detached(priority: .utility) { try Data(contentsOf: url) }.value
+        return data
     }
 
     // MARK: - Recursive asset enumeration

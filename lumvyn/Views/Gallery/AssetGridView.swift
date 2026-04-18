@@ -194,11 +194,21 @@ struct AssetCellView: View {
     @EnvironmentObject private var galleryStore: GalleryStore
     @State private var thumbnail: PlatformImage? = nil
     @State private var loadFailed = false
+    @State private var revealed = false
+    @State private var pressed = false
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                Color.platformSecondaryBackground
+                LinearGradient(
+                    colors: [
+                        Color.platformSecondaryBackground,
+                        Color.platformSecondaryBackground.opacity(0.6)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .shimmer(thumbnail == nil && !loadFailed)
 
                 if let thumbnail {
                     Image(platformImage: thumbnail)
@@ -206,12 +216,23 @@ struct AssetCellView: View {
                         .scaledToFill()
                         .frame(width: geo.size.width, height: geo.size.height)
                         .clipped()
+                        .scaleEffect(revealed ? 1.0 : 1.06)
+                        .opacity(revealed ? 1.0 : 0.0)
+                        .animation(DSMotion.smooth, value: revealed)
+                        .onAppear { revealed = true }
                 } else if loadFailed {
                     Image(systemName: "photo.badge.exclamationmark")
                         .foregroundStyle(.secondary)
                 }
 
                 if asset.mediaType == .video {
+                    LinearGradient(
+                        colors: [.clear, .black.opacity(0.35)],
+                        startPoint: .center,
+                        endPoint: .bottom
+                    )
+                    .allowsHitTesting(false)
+
                     VStack {
                         Spacer()
                         HStack {
@@ -229,13 +250,22 @@ struct AssetCellView: View {
             .frame(width: geo.size.width, height: geo.size.height)
             .overlay(alignment: .topTrailing) {
                 if asset.isBackedUp {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 14))
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 13, weight: .semibold))
                         .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, .black.opacity(0.45))
+                        .foregroundStyle(.white, DS.Palette.success.opacity(0.85))
+                        .padding(4)
+                        .background(.ultraThinMaterial, in: Circle())
                         .padding(5)
+                        .transition(.scale.combined(with: .opacity))
                 }
             }
+            .scaleEffect(pressed ? 0.96 : 1.0)
+            .brightness(pressed ? -0.03 : 0)
+            .animation(DSMotion.tap, value: pressed)
+            .onLongPressGesture(minimumDuration: 0.001, pressing: { isPressing in
+                pressed = isPressing
+            }, perform: {})
         }
         .contentShape(Rectangle())
         .task(id: asset.remotePath) {

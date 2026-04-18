@@ -35,6 +35,7 @@ enum SMBClientError: LocalizedError {
 
 enum SMBConnectionStatus: Equatable {
     case unknown
+    case connecting
     case notConfigured
     case timedOut(host: String)
     case unreachable(String?)
@@ -48,6 +49,7 @@ enum SMBConnectionStatus: Equatable {
     var message: String? {
         switch self {
         case .unknown: return nil
+        case .connecting: return NSLocalizedString("Verbinde…", comment: "SMB status: connecting")
         case .notConfigured: return NSLocalizedString("SMB not configured", comment: "SMB status: not configured")
         case .timedOut(let host): return String(format: NSLocalizedString("Connection to %@ timed out", comment: "SMB status: timed out"), host)
         case .unreachable(let msg): return msg
@@ -106,9 +108,6 @@ protocol SMBClientProtocol: AnyObject {
 
     func downloadFile(host: String, shareName: String, remotePath: String, credentials: SMBCredentials?) async throws -> URL
 
-    /// Ensure every component of `remoteDirectory` exists on the server,
-    /// creating intermediate directories as needed. Must be a no-op when
-    /// `remoteDirectory` is empty.
     func ensureDirectory(
         host: String,
         sharePath: String,
@@ -118,13 +117,24 @@ protocol SMBClientProtocol: AnyObject {
 }
 
 extension SMBClientProtocol {
-    /// Default no-op so existing mocks don't have to implement it.
     func ensureDirectory(
         host: String,
         sharePath: String,
         remoteDirectory: String,
         credentials: SMBCredentials
     ) async throws {}
+
+    func listShares(host: String, credentials: SMBCredentials?) async throws -> [SMBShare] { [] }
+
+    func listDirectories(host: String, shareName: String, path: String, credentials: SMBCredentials?) async throws -> [String] { [] }
+
+    func listDirectoryItems(host: String, shareName: String, path: String, credentials: SMBCredentials?) async throws -> [SMBDirectoryEntry] { [] }
+
+    func deleteRemoteItem(host: String, sharePath: String, remotePath: String, credentials: SMBCredentials?) async throws {}
+
+    func downloadFile(host: String, shareName: String, remotePath: String, credentials: SMBCredentials?) async throws -> URL {
+        throw SMBClientError.unavailable
+    }
 }
 
 final class SMBClient: SMBClientProtocol {
@@ -695,6 +705,8 @@ final class SMBClient: SMBClientProtocol {
 
                     case .setup, .preparing:
                         break
+                    @unknown default:
+                        break
                     }
                 }
 
@@ -712,8 +724,7 @@ final class SMBClient: SMBClientProtocol {
 private final class OneShotFlag: Sendable {
 
     private let storage = OSAllocatedUnfairLock(initialState: false)
-
-    func tryFire() -> Bool {
+    nonisolated func tryFire() -> Bool {
         storage.withLock { fired in
             guard !fired else { return false }
             fired = true

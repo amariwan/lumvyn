@@ -9,7 +9,8 @@ actor GalleryThumbnailCache {
     private let maxSizeBytes: Int64
     private var index: [String: Entry] = [:]
     private var totalSizeBytes: Int64 = 0
-    private var loaded = false
+    private var isIndexLoaded = false
+    private let fileManager = FileManager.default
 
     private struct Entry {
         let size: Int64
@@ -18,20 +19,36 @@ actor GalleryThumbnailCache {
 
     init(maxSizeBytes: Int64 = 500 * 1024 * 1024) {
         self.maxSizeBytes = maxSizeBytes
-        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
+        let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? fileManager.temporaryDirectory
         self.directory = caches.appendingPathComponent("GalleryThumbnails", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        do {
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        } catch {
+            cacheLogger.warning("Failed to create cache directory: \(error.localizedDescription)")
+        }
     }
 
-    func data(for remotePath: String) -> Data? {
+    func data(for remotePath: String) async -> Data? {
         loadIndexIfNeeded()
         let key = Self.cacheKey(for: remotePath)
         let url = directory.appendingPathComponent(key)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        if var entry = index[key] {
-            entry.lastUsed = Date()
-            index[key] = entry
+        let data: Data?
+        do {
+            data = try await Task.detached(priority: .utility) { try Data(contentsOf: url) }.value
+        } catch {
+            return nil
+        }
+        if let data = data {
+            if var entry = index[key] {
+                entry.lastUsed = Date()
+                index[key] = entry
+            } else {
+                // If the file exists on disk but wasn't indexed (e.g. load failed earlier), add it now
+                let size = Int64(data.count)
+                index[key] = Entry(size: size, lastUsed: Date())
+                totalSizeBytes += size
+            }
         }
         return data
     }
@@ -40,6 +57,12 @@ actor GalleryThumbnailCache {
         loadIndexIfNeeded()
         let key = Self.cacheKey(for: remotePath)
         let url = directory.appendingPathComponent(key)
+        do {
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        } catch {
+            cacheLogger.warning("Ensure cache directory failed: \(error.localizedDescription)")
+        }
+
         do {
             try data.write(to: url, options: [.atomic])
             if let existing = index[key] {
@@ -50,15 +73,16 @@ actor GalleryThumbnailCache {
             totalSizeBytes += size
             evictIfNeeded()
         } catch {
-            cacheLogger.error("Cache write failed: \(error.localizedDescription)")
+            cacheLogger.error("Cache write failed for \(key): \(error.localizedDescription)")
         }
     }
 
     func clear() {
-        try? FileManager.default.removeItem(at: directory)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? fileManager.removeItem(at: directory)
+        try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         index.removeAll()
         totalSizeBytes = 0
+        isIndexLoaded = true
     }
 
     static func cacheKey(for remotePath: String) -> String {
@@ -67,13 +91,21 @@ actor GalleryThumbnailCache {
     }
 
     private func loadIndexIfNeeded() {
-        guard !loaded else { return }
-        loaded = true
-        guard let urls = try? FileManager.default.contentsOfDirectory(
+        guard !isIndexLoaded else { return }
+
+        do {
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        } catch {
+            cacheLogger.warning("Failed to create cache directory: \(error.localizedDescription)")
+        }
+
+        guard let urls = try? fileManager.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles]
-        ) else { return }
+        ) else {
+            return
+        }
 
         var total: Int64 = 0
         for url in urls {
@@ -84,6 +116,7 @@ actor GalleryThumbnailCache {
             total += size
         }
         totalSizeBytes = total
+        isIndexLoaded = true
     }
 
     private func evictIfNeeded() {
@@ -92,7 +125,11 @@ actor GalleryThumbnailCache {
         for (key, entry) in sorted {
             if totalSizeBytes <= maxSizeBytes { break }
             let url = directory.appendingPathComponent(key)
-            try? FileManager.default.removeItem(at: url)
+            do {
+                try fileManager.removeItem(at: url)
+            } catch {
+                cacheLogger.warning("Failed to remove cached thumbnail \(key): \(error.localizedDescription)")
+            }
             index.removeValue(forKey: key)
             totalSizeBytes -= entry.size
         }

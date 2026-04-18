@@ -55,26 +55,42 @@ struct MediathekView: View {
     @ViewBuilder
     private var content: some View {
         VStack(spacing: 0) {
-            Picker("", selection: $mode) {
-                ForEach(MediathekMode.allCases) { mode in
-                    Text(mode.titleKey).tag(mode)
+            DSPillPicker(selection: $mode, options: MediathekMode.allCases) { mode in
+                Text(mode.titleKey)
+            }
+            .padding(.horizontal, DS.Spacing.md)
+            .padding(.top, 6)
+            .padding(.bottom, 10)
+
+            ZStack {
+                switch mode {
+                case .years:
+                    YearsGridView()
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 1.02)),
+                            removal: .opacity
+                        ))
+                case .months:
+                    MonthsGridView(scope: .all)
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 1.02)),
+                            removal: .opacity
+                        ))
+                case .days:
+                    DaysGridView(scope: .all)
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 1.02)),
+                            removal: .opacity
+                        ))
+                case .all:
+                    AllPhotosGridView()
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 1.02)),
+                            removal: .opacity
+                        ))
                 }
             }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 16)
-            .padding(.top, 4)
-            .padding(.bottom, 8)
-
-            switch mode {
-            case .years:
-                YearsGridView()
-            case .months:
-                MonthsGridView(scope: .all)
-            case .days:
-                DaysGridView(scope: .all)
-            case .all:
-                AllPhotosGridView()
-            }
+            .animation(DSMotion.smooth, value: mode)
         }
         .refreshable {
             await galleryStore.loadAllAssets()

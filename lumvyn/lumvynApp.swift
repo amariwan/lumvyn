@@ -68,6 +68,7 @@ struct lumvynApp: App {
                 }
                 .onChange(of: scenePhase) { phase in
                     if phase == .active {
+                        settingsStore.reconnectOnForeground()
                         Task { await queueManager.startIfNeeded() }
                     } else if phase == .background {
                         #if os(iOS)

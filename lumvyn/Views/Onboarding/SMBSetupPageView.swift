@@ -326,6 +326,11 @@ private struct ConnectionStatusMessage: View {
                             text: "Benutzername/Passwort fehlt (Leer für Gastzugriff)",
                             color: .white.opacity(0.7))
                     }
+                case .connecting:
+                    InfoMessageRow(
+                        icon: "arrow.triangle.2.circlepath", text: "Verbinde…",
+                        color: .white.opacity(0.7)
+                    )
                 }
             }
         }

@@ -21,11 +21,17 @@ actor RemoteIndexStore {
         fileURL = dir.appendingPathComponent(fileName)
 
         if FileManager.default.fileExists(atPath: fileURL.path) {
-            do {
+            let detached = Task.detached { () throws -> [String: Entry] in
                 let data = try Data(contentsOf: fileURL)
-                self.map = try JSONDecoder().decode([String: Entry].self, from: data)
-            } catch {
-                NSLog("RemoteIndexStore load error: %@", String(describing: error))
+                return try JSONDecoder().decode([String: Entry].self, from: data)
+            }
+            Task { // actor-isolated task to assign results
+                do {
+                    let decoded = try await detached.value
+                    self.map = decoded
+                } catch {
+                    NSLog("RemoteIndexStore load error: %@", String(describing: error))
+                }
             }
         }
     }

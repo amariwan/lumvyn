@@ -36,8 +36,11 @@ actor RemoteDeletionQueue {
 
         do {
             guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
-            let data = try Data(contentsOf: fileURL)
-            self.queue = try JSONDecoder().decode([Entry].self, from: data)
+            let decoded = try await Task.detached(priority: .utility) { () -> [Entry] in
+                let data = try Data(contentsOf: fileURL)
+                return try JSONDecoder().decode([Entry].self, from: data)
+            }.value
+            self.queue = decoded
         } catch {
             logger.error("Failed to load queue: \(error.localizedDescription)")
         }

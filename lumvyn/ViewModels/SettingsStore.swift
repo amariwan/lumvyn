@@ -1,6 +1,10 @@
 import Foundation
 import Combine
 
+#if os(iOS)
+import UIKit
+#endif
+
 @MainActor
 final class SettingsStore: ObservableObject {
     private enum Keys {
@@ -63,17 +67,41 @@ final class SettingsStore: ObservableObject {
 
     private var savedPasswordCache: String? = nil
     private var savedEncryptionPasswordCache: String? = nil
+    private var secureValuesLoaded: Bool = false
+    private var securePasswordDirty: Bool = false
+    private var secureEncryptionDirty: Bool = false
+
+    private var reconnectTask: Task<Void, Never>? = nil
 
     private let defaults = UserDefaults.standard
     private let smbClient: SMBClientProtocol
 
     var browserClient: any SMBClientProtocol { smbClient }
     private var cancellables = Set<AnyCancellable>()
+    private var notificationTokens: [NSObjectProtocol] = []
 
-    init(smbClient: SMBClientProtocol = SMBClient()) {
-        self.smbClient = smbClient
+    init(smbClient: SMBClientProtocol? = nil) {
+        self.smbClient = smbClient ?? SMBClient()
         loadSettings()
         setupAutoSave()
+        #if os(iOS)
+        let center = NotificationCenter.default
+        let resign = center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.saveSettings()
+        }
+        let background = center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.saveSettings()
+        }
+        notificationTokens.append(resign)
+        notificationTokens.append(background)
+        #endif
+    }
+
+    deinit {
+        reconnectTask?.cancel()
+        for token in notificationTokens {
+            NotificationCenter.default.removeObserver(token)
+        }
     }
 
     private func setupAutoSave() {
@@ -109,6 +137,60 @@ final class SettingsStore: ObservableObject {
                 Task { await self?.autoSaveSettings() }
             }
             .store(in: &cancellables)
+
+        $password
+            .dropFirst()
+            .sink { [weak self] new in
+                guard let self = self else { return }
+                if !self.secureValuesLoaded { return }
+                if new.isEmpty { return }
+                self.securePasswordDirty = (new != self.savedPasswordCache)
+            }
+            .store(in: &cancellables)
+
+        $encryptionPassword
+            .dropFirst()
+            .sink { [weak self] new in
+                guard let self = self else { return }
+                if !self.secureValuesLoaded { return }
+                if new.isEmpty { return }
+                self.secureEncryptionDirty = (new != self.savedEncryptionPasswordCache)
+            }
+            .store(in: &cancellables)
+
+        Publishers.CombineLatest4($host, $sharePath, $username, $password)
+            .map { [weak self] host, share, user, pw -> ConnectionKey in
+                let effectivePw = pw.isEmpty ? (self?.savedPasswordCache ?? "") : pw
+                return ConnectionKey(host: host.trimmed, share: share.trimmed, user: user.trimmed, password: effectivePw)
+            }
+            .removeDuplicates()
+            .dropFirst()
+            .debounce(for: .seconds(1), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.requestReconnect()
+            }
+            .store(in: &cancellables)
+
+        requestReconnect(initialDelay: .milliseconds(200))
+    }
+
+    private struct ConnectionKey: Equatable {
+        let host: String
+        let share: String
+        let user: String
+        let password: String
+    }
+
+    @MainActor
+    private func requestReconnect(initialDelay: DispatchTimeInterval = .milliseconds(0)) {
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
+            if case .milliseconds(let ms) = initialDelay, ms > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(ms) * 1_000_000)
+            }
+            if Task.isCancelled { return }
+            await self?.autoReconnectIfNeeded()
+        }
     }
 
     private func makeSavePublisher<P>(_ publisher: Published<P>.Publisher) -> AnyPublisher<Void, Never> {
@@ -133,6 +215,9 @@ final class SettingsStore: ObservableObject {
             lastConnectionSucceeded = false
             return
         }
+
+        reconnectTask?.cancel()
+        reconnectTask = nil
 
         isTestingConnection = true
         defer { isTestingConnection = false }
@@ -177,8 +262,6 @@ final class SettingsStore: ObservableObject {
         conflictResolution = defaults.enum(forKey: Keys.conflictResolution, defaultValue: .rename)
         encryptionEnabled = defaults.bool(forKey: Keys.encryptionEnabled, defaultValue: false)
         maxConcurrentUploads = defaults.object(forKey: Keys.maxConcurrentUploads) as? Int ?? 2
-        // Read keychain values off the main thread to avoid blocking launch.
-        encryptionPassword = ""
         deduplicationEnabled = defaults.bool(forKey: Keys.deduplication, defaultValue: true)
         syncMode = defaults.enum(forKey: Keys.syncMode, defaultValue: .backup)
         let storedTemplate = defaults.string(forKey: Keys.folderTemplate)?.trimmed ?? ""
@@ -189,18 +272,12 @@ final class SettingsStore: ObservableObject {
             selectedLanguage = nil
         }
 
-        // Load secure values asynchronously to avoid main-thread I/O during init.
-        Task.detached(priority: .utility) { [keys = Keys.self] in
-            let saved = KeychainStorage.string(forKey: keys.password)
-            let enc = KeychainStorage.string(forKey: keys.encryptionPassword)
-            await MainActor.run {
-                self.savedPasswordCache = saved
-                self.savedEncryptionPasswordCache = enc
-                if self.encryptionPassword.isEmpty {
-                    self.encryptionPassword = enc ?? ""
-                }
-            }
-        }
+        savedPasswordCache = KeychainStorage.string(forKey: Keys.password)
+        password = ""
+
+        savedEncryptionPasswordCache = KeychainStorage.string(forKey: Keys.encryptionPassword)
+        encryptionPassword = ""
+        secureValuesLoaded = true
     }
 
     func saveSettings() {
@@ -225,11 +302,19 @@ final class SettingsStore: ObservableObject {
         defaults.set(syncMode.rawValue, forKey: Keys.syncMode)
         defaults.set(folderTemplate, forKey: Keys.folderTemplate)
 
-        let passwordToPersist = password.isEmpty ? savedPasswordCache : password
-        setSecureValue(passwordToPersist?.isEmpty == false ? passwordToPersist : nil, forKey: Keys.password)
+        if securePasswordDirty {
+            if !password.isEmpty {
+                setSecureValue(password, forKey: Keys.password)
+            }
+            securePasswordDirty = false
+        }
 
-        let encryptionPasswordToPersist = encryptionPassword.isEmpty ? savedEncryptionPasswordCache : encryptionPassword
-        setSecureValue(encryptionPasswordToPersist?.isEmpty == false ? encryptionPasswordToPersist : nil, forKey: Keys.encryptionPassword)
+        if secureEncryptionDirty {
+            if !encryptionPassword.isEmpty {
+                setSecureValue(encryptionPassword, forKey: Keys.encryptionPassword)
+            }
+            secureEncryptionDirty = false
+        }
 
         if let language = selectedLanguage {
             defaults.set(language, forKey: Keys.language)
@@ -258,9 +343,7 @@ final class SettingsStore: ObservableObject {
     }
 
     var encryptionKey: String? {
-        guard !encryptionPassword.isEmpty else {
-            return KeychainStorage.string(forKey: Keys.encryptionPassword)
-        }
+        guard !encryptionPassword.isEmpty else { return savedEncryptionPasswordCache }
         return encryptionPassword
     }
 
@@ -289,13 +372,95 @@ final class SettingsStore: ObservableObject {
         config.isValid && credentials != nil
     }
 
+    @MainActor
+    private func autoReconnectIfNeeded() async {
+        if Task.isCancelled { return }
+
+        guard config.isValid, credentials != nil else {
+            connectionStatus = .notConfigured
+            lastConnectionSucceeded = false
+            return
+        }
+
+        await performReconnect()
+    }
+
+    @MainActor
+    private func performReconnect(maxAttempts: Int = 3) async {
+        if isTestingConnection { return }
+        if Task.isCancelled { return }
+
+        guard config.isValid, let creds = credentials else {
+            connectionStatus = .notConfigured
+            lastConnectionSucceeded = false
+            return
+        }
+
+        connectionStatus = .connecting
+        lastConnectionSucceeded = false
+
+        var lastStatus: SMBConnectionStatus = .unknown
+
+        for attempt in 1...maxAttempts {
+            if Task.isCancelled { return }
+
+            let status = await smbClient.connectionStatus(host: host, sharePath: sharePath, credentials: creds)
+            if Task.isCancelled { return }
+
+            connectionStatus = status
+            lastStatus = status
+
+            switch status {
+            case .ready, .authenticated:
+                do {
+                    try await smbClient.probeWrite(host: host, sharePath: sharePath, credentials: creds)
+                    if Task.isCancelled { return }
+                    connectionStatus = .authenticated
+                    connectionError = nil
+                    lastConnectionSucceeded = true
+                    return
+                } catch {
+                    if Task.isCancelled { return }
+                    connectionError = (error as NSError).localizedDescription
+                    lastConnectionSucceeded = false
+                    connectionStatus = .failed(connectionError ?? "")
+                }
+            default:
+                lastConnectionSucceeded = false
+            }
+
+            if attempt < maxAttempts {
+                let maxBackoffSeconds = UInt64.max / 1_000_000_000
+                let maxBackoffExponent = (UInt64.bitWidth - 1) - maxBackoffSeconds.leadingZeroBitCount
+                let exponent = min(attempt - 1, maxBackoffExponent)
+                let backoffSeconds = UInt64(1) << exponent
+                let backoffNanoseconds = backoffSeconds * 1_000_000_000
+                try? await Task.sleep(nanoseconds: backoffNanoseconds)
+                if Task.isCancelled { return }
+            }
+        }
+
+        connectionStatus = lastStatus
+    }
+
+    @MainActor
+    func reconnectOnForeground() {
+        requestReconnect()
+    }
+
     func clearCredentials() {
+        reconnectTask?.cancel()
+        reconnectTask = nil
         setSecureValue(nil, forKey: Keys.password)
+        securePasswordDirty = false
         password = ""
+        connectionStatus = .notConfigured
+        lastConnectionSucceeded = false
     }
 
     func clearEncryptionPassword() {
         setSecureValue(nil, forKey: Keys.encryptionPassword)
+        secureEncryptionDirty = false
         encryptionPassword = ""
     }
 
@@ -304,27 +469,20 @@ final class SettingsStore: ObservableObject {
     }
 
     private func setSecureValue(_ value: String?, forKey key: String) {
-        Task.detached(priority: .utility) { [key, value] in
-            do {
-                if let value = value, !value.isEmpty {
-                    try KeychainStorage.save(value, forKey: key)
-                } else {
-                    try KeychainStorage.deleteValue(forKey: key)
-                }
-
-                if key == Keys.password {
-                    let saved = KeychainStorage.string(forKey: key)
-                    await MainActor.run { self.savedPasswordCache = saved }
-                } else if key == Keys.encryptionPassword {
-                    let enc = KeychainStorage.string(forKey: key)
-                    await MainActor.run {
-                        self.savedEncryptionPasswordCache = enc
-                        self.encryptionPassword = enc ?? ""
-                    }
-                }
-            } catch {
-                await MainActor.run { NSLog("Keychain error for %{public}@ - %{public}@", key, String(describing: error)) }
+        do {
+            if let value = value, !value.isEmpty {
+                try KeychainStorage.save(value, forKey: key)
+            } else {
+                try KeychainStorage.deleteValue(forKey: key)
             }
+
+            if key == Keys.password {
+                savedPasswordCache = KeychainStorage.string(forKey: key)
+            } else if key == Keys.encryptionPassword {
+                savedEncryptionPasswordCache = KeychainStorage.string(forKey: key)
+            }
+        } catch {
+            NSLog("Keychain error for %{public}@ - %{public}@", key, String(describing: error))
         }
     }
 }

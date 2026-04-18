@@ -58,7 +58,8 @@ final class ModelTests: XCTestCase {
     }
 
     func testUploadItemDecodesLegacyLocalizedMediaType() throws {
-        let json = #"[
+        let json = #"""
+        [
             {
                 "id": "00000000-0000-0000-0000-000000000000",
                 "assetLocalIdentifier": "abc",
@@ -83,7 +84,8 @@ final class ModelTests: XCTestCase {
                 "lastError": null,
                 "assetDuration": 15.0
             }
-        ]"#
+        ]
+        """#
         let data = Data(json.utf8)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .secondsSince1970

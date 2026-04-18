@@ -46,18 +46,22 @@ public actor DeduplicationService {
             return
         }
 
-        let task = Task {
-            defer { isLoaded = true }
-            guard FileManager.default.fileExists(atPath: storageURL.path) else { return }
-
+        let detached = Task.detached { () -> Set<String> in
+            guard FileManager.default.fileExists(atPath: storageURL.path) else { return Set<String>() }
             do {
                 let data = try Data(contentsOf: storageURL)
                 let array = try JSONDecoder().decode([String].self, from: data)
-                self.knownFingerprints = Set(array)
+                return Set(array)
             } catch {
                 dedupLogger.error("Dedup load error: \(error.localizedDescription)")
-                self.knownFingerprints = []
+                return Set<String>()
             }
+        }
+
+        let task = Task {
+            defer { isLoaded = true }
+            let result = await detached.value
+            self.knownFingerprints = result
         }
 
         loadTask = task
