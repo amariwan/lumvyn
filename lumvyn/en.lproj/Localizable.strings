@@ -1,0 +1,315 @@
+/* English translations */
+
+/* Nav & common UI */
+"Übersicht" = "Overview";
+"Einstellungen" = "Settings";
+"Weiter" = "Continue";
+"Fertig" = "Done";
+"Fehler" = "Failed";
+"Abbrechen" = "Cancel";
+"Starten" = "Start";
+"Stoppen" = "Stop";
+"Erneut versuchen" = "Retry";
+"Jetzt überspringen" = "Skip for now";
+"Loslegen" = "Get Started";
+"App starten" = "Open App";
+"Elemente" = "Items";
+"Dateien" = "Files";
+"Zeitraum" = "Date Range";
+"Startdatum" = "Start Date";
+"Enddatum" = "End Date";
+"Benutzerdefiniert" = "Custom";
+"Aktiv" = "Active";
+"Ausstehend" = "Pending";
+"Alles bereit!" = "All Set!";
+
+/* Onboarding */
+"Willkommen bei Lumvyn" = "Welcome to Lumvyn";
+"Deine Fotos & Videos automatisch auf deinen Heimserver – sicher, privat, ohne Cloud." = "Your photos & videos, automatically backed up to your home server — secure, private, no cloud.";
+"Dein Server ist konfiguriert. Lumvyn startet jetzt automatisch mit dem Upload." = "Your server is configured. Lumvyn will now upload automatically.";
+
+/* SMB Server setup */
+"SMB-Server" = "SMB Server";
+"SMB-Server einrichten" = "Set Up SMB Server";
+"SMB-Verbindung konfiguriert" = "SMB Connection Configured";
+"Noch nicht konfiguriert" = "Not Configured";
+"Gib die Adresse und den Freigabepfad deines Servers ein." = "Enter your server address and share path.";
+"Beispiel: 192.168.1.10  ·  /backup/fotos" = "Example: 192.168.1.10  ·  /backup/photos";
+"Bitte SMB-Server und Anmeldedaten konfigurieren." = "Please configure your SMB server and credentials.";
+"Bitte SMB-Server und Anmeldedaten in den Einstellungen konfigurieren." = "Please configure your SMB server and credentials in Settings.";
+"Server, Freigabepfad und Anmeldedaten eingeben." = "Enter server, share path, and credentials.";
+"Bitte alle Felder ausfüllen, um Uploads zu aktivieren." = "Please fill in all fields to enable uploads.";
+
+/* SMB fields */
+"Host oder IP" = "Host or IP";
+"Host oder IP-Adresse" = "Host or IP Address";
+"Freigabe / Pfad" = "Share / Path";
+"Freigabe / Pfad  (z.B. /photos)" = "Share / Path (e.g. /photos)";
+"Host und Pfad sind erforderlich." = "Host and path are required.";
+"Host ist ungültig" = "Invalid host";
+"Freigabe automatisch ausgefüllt" = "Share path auto-filled";
+
+/* Share browser */
+"Freigabe wählen" = "Select Share";
+"Freigaben werden geladen…" = "Loading shares…";
+"Keine Freigaben gefunden" = "No shares found";
+"Freigabe nicht gefunden" = "Share not found";
+"Ordner durchsuchen" = "Browse Folders";
+"Ordner werden geladen…" = "Loading folders…";
+"Unterordner" = "Subfolders";
+"Keine Unterordner" = "No subfolders";
+"Diesen Ordner wählen" = "Select This Folder";
+"Root dieser Freigabe wählen" = "Select Share Root";
+
+/* Connection test */
+"Verbindung testen" = "Test Connection";
+"Verbindung wird getestet…" = "Testing connection…";
+"Verbindung wird geprüft…" = "Checking connection…";
+"Test läuft…" = "Running test…";
+"Verbindung erfolgreich" = "Connected";
+"Verbindungsfehler" = "Connection Error";
+"Port geöffnet — Anmeldung überprüfen" = "Port open — check credentials";
+
+/* Authentication */
+"Anmeldung" = "Authentication";
+"Anmeldedaten" = "Credentials";
+"Benutzername" = "Username";
+"Passwort" = "Password";
+"Benutzername und Passwort für deinen SMB-Server." = "Username and password for your SMB server.";
+"Benutzername ist erforderlich." = "Username is required.";
+"Benutzername oder Passwort fehlt." = "Username or password is missing.";
+"Benutzername oder Passwort fehlt, oder beides leer lassen für Gastzugriff." = "Username or password is missing — or leave both empty for guest access.";
+"Das Passwort wird sicher in der Keychain gespeichert." = "Your password is stored securely in the Keychain.";
+"Passwort ist gespeichert." = "Password saved.";
+"Passwort zurücksetzen" = "Reset Password";
+"Passwort aus Keychain verwendet." = "Using saved password from Keychain.";
+"Gespeichertes Passwort verwenden" = "Use Saved Password";
+"Anderes Passwort verwenden" = "Use a Different Password";
+"Füllt das gespeicherte Passwort in das Passwortfeld ein." = "Fills in your saved password.";
+"Ermöglicht die Eingabe eines anderen Passworts." = "Lets you enter a different password.";
+
+/* Security */
+"Sicherheit" = "Security";
+"Verschlüsselung" = "Encryption";
+"Authentifizierung fehlgeschlagen" = "Authentication failed";
+"Authentication failed" = "Authentication failed";
+
+/* Upload behavior */
+"Upload-Verhalten" = "Upload Behavior";
+"Automatisch hochladen" = "Auto-Upload";
+"Hintergrund-Upload" = "Background Upload";
+"Hintergrund-Upload aktivieren" = "Enable Background Uploads";
+"Automatisch im Hintergrund" = "Automatically in the Background";
+"Sobald du mit WLAN verbunden bist, lädt Lumvyn neue Medien selbstständig hoch." = "Once connected to Wi-Fi, Lumvyn uploads new media automatically.";
+"Upload-Zyklus" = "Upload Schedule";
+"Upload starten" = "Start Upload";
+"Lädt hoch…" = "Uploading…";
+"Keine Mediendateien in der Warteschlange." = "No media files in queue.";
+
+/* Upload schedule */
+"Sofort" = "Immediately";
+"Stündlich" = "Hourly";
+"Täglich" = "Daily";
+"Wöchentlich" = "Weekly";
+"Manuell" = "Manual";
+
+/* Network */
+"Nur WLAN" = "Wi-Fi Only";
+"Mobilfunk erlauben" = "Allow Cellular";
+"Offline" = "Offline";
+"Wi-Fi" = "Wi-Fi";
+"Mobilfunk" = "Cellular";
+"Ethernet" = "Ethernet";
+"Loopback" = "Loopback";
+"Andere" = "Other";
+"WLAN erforderlich für Upload." = "Wi-Fi required to upload.";
+
+/* Media filter */
+"Medienfilter" = "Media Filter";
+"Medientyp" = "Media Type";
+"Alle Medien" = "All Media";
+"Fotos" = "Photos";
+"Videos" = "Videos";
+"Live-Fotos" = "Live Photos";
+"Screenshots" = "Screenshots";
+"Panoramen" = "Panoramas";
+"Serienaufnahmen" = "Bursts";
+
+/* Album filter */
+"Album-Filter" = "Album Filter";
+"Album-Filter aktivieren" = "Enable Album Filter";
+"Albumnamen, getrennt durch Kommas" = "Album names, separated by commas";
+
+/* Date range labels */
+"Gesamter Zeitraum" = "All Time";
+"Letzte 24 Stunden" = "Last 24 Hours";
+"Letzte 7 Tage" = "Last 7 Days";
+"Letzte 30 Tage" = "Last 30 Days";
+
+/* Conflict resolution */
+"Konfliktverhalten" = "Conflict Behavior";
+"Konfliktlösung" = "Conflict Resolution";
+"Überschreiben" = "Overwrite";
+"Überspringen" = "Skip";
+"Umbenennen" = "Rename";
+
+/* Deduplication */
+"Duplikate erkennen" = "Detect Duplicates";
+"Duplikaterkennung aktivieren" = "Enable Duplicate Detection";
+
+/* Encryption */
+"Verschlüsselung aktivieren" = "Enable Encryption";
+"Verschlüsselungs-Passwort" = "Encryption Password";
+"Sicherheit & Verschlüsselung" = "Security & Encryption";
+"Verschlüsselung aktiviert, aber Schlüssel fehlt." = "Encryption enabled, but key is missing.";
+"Ungültiger Verschlüsselungsschlüssel." = "Invalid encryption key.";
+"Verschlüsselung fehlgeschlagen." = "Encryption failed.";
+"Entschlüsselung fehlgeschlagen." = "Decryption failed.";
+
+/* Settings */
+"Einstellungen speichern" = "Save Settings";
+"Konfiguration gespeichert. Uploads können jetzt starten." = "Configuration saved. Uploads can now begin.";
+"Konfiguration wird automatisch gespeichert. Uploads können jetzt starten." = "Settings are saved automatically. Uploads can now begin.";
+"Konfiguration wird automatisch gespeichert." = "Settings are saved automatically.";
+
+/* Notifications */
+"Upload abgeschlossen" = "Upload Complete";
+"Alle Dateien wurden erfolgreich hochgeladen." = "All files uploaded successfully.";
+"UploadSummary" = "%d files uploaded, %d failed.";
+
+/* Warteschlange */
+"Warteschlange" = "Queue";
+"Erledigte löschen" = "Clear Completed";
+"Alles erneut versuchen" = "Retry All";
+"Noch keine Medien in der Upload-Warteschlange." = "No media in the upload queue yet.";
+
+/* SMB errors */
+"SMB-Server nicht konfiguriert." = "SMB server not configured.";
+"SMBClientNotConfigured" = "SMB server not configured.";
+"SMB not configured" = "SMB server not configured.";
+"SMB-Konfiguration fehlt." = "SMB configuration is missing.";
+"SMB-Konfiguration oder Credentials fehlen." = "SMB configuration or credentials are missing.";
+"ConnectionFailedFormat" = "Connection failed: %@";
+"SMBConnectionFailedFormat" = "Connection failed: %@";
+"UploadFailedFormat" = "Upload failed: %@";
+"SMBUploadFailedFormat" = "Upload failed: %@";
+"SMBUploadNotAvailable" = "SMB upload is unavailable. Add the AMSMB2 package to enable uploads.";
+"SMB upload support is not available in this build" = "SMB upload is unavailable. Add the AMSMB2 package to enable uploads.";
+"SMBInvalidPort" = "Invalid SMB port (445).";
+"InvalidSMBPort" = "Invalid SMB port (445).";
+"SMBConnectionCancelled" = "SMB connection cancelled.";
+"SMBConnectionTimeoutFormat" = "Connection to \u201c%@\u201d timed out.";
+"Connection to %@ timed out" = "Connection to %@ timed out.";
+"Verbindung zu %@ zeitüberschritten." = "Connection to %@ timed out.";
+"Share not found" = "Share not found.";
+"SMB manager is unavailable" = "SMB manager is unavailable.";
+
+/* Asset errors */
+"Asset nicht gefunden" = "Asset not found";
+"Keine Asset-Ressource verfügbar" = "No asset resource available";
+"Keine Asset-Ressource zum Hashen gefunden." = "No asset resource found for hashing.";
+"Hashing des Assets fehlgeschlagen." = "Failed to hash asset.";
+
+/* Checklist onboarding */
+"ChecklistPageTitle" = "System Check";
+"ChecklistPageSubtitle" = "Lumvyn needs these permissions to work properly.";
+"ChecklistPhotosTitle" = "Photo Library";
+"ChecklistPhotosSubtitle" = "Required to detect and upload new photos.";
+"ChecklistPhotoDenied" = "Access denied. Enable in Settings \u2192 Privacy \u2192 Photos.";
+"ChecklistPhotoLimited" = "Limited access. Some photos may be skipped.";
+"ChecklistPhotoUnknown" = "Unknown authorization status.";
+"ChecklistNotificationsTitle" = "Notifications";
+"ChecklistNotificationsSubtitle" = "Lumvyn will notify you when uploads are complete.";
+"ChecklistNotificationsDenied" = "Disabled. You won't receive upload notifications.";
+"ChecklistSMBTitle" = "SMB Server";
+"ChecklistSMBSubtitle" = "Server address and credentials are configured.";
+"ChecklistSMBMissing" = "Server not configured. Go back and complete setup.";
+
+"ChecklistAllReady" = "All set — Lumvyn is ready to go!";
+"ChecklistHasBlocking" = "Complete the required steps to continue.";
+
+/* Format keys */
+"MaxConcurrentUploads" = "Max concurrent uploads: %d";
+"AlbumPrefix" = "Album: %@";
+"LocationPrefix" = "Location: %@";
+
+/* Language picker */
+"System" = "System";
+"Deutsch" = "Deutsch";
+"English" = "English";
+
+/* Asset source & subtype names */
+"Benutzerbibliothek" = "User Library";
+"iCloud Shared" = "iCloud Shared";
+"iTunes synchronisiert" = "iTunes Synced";
+"Unbekannt" = "Unknown";
+"Panorama" = "Panorama";
+"HDR" = "HDR";
+"Screenshot" = "Screenshot";
+"Live Photo" = "Live Photo";
+"Slow-Motion" = "Slow Motion";
+"Time-Lapse" = "Time-Lapse";
+"Stream" = "Stream";
+"Tiefeneffekt" = "Depth Effect";
+"Burst" = "Burst";
+
+/* Media types */
+"Video" = "Video";
+"Foto" = "Photo";
+
+/* Language picker */
+"Sprache" = "Language";
+"SprachhinweisNeustart" = "Language change takes effect after restarting the app.";
+
+/* Storage */
+"Speicher" = "Storage";
+"Cache-Größe" = "Cache Size";
+"Cache leeren" = "Clear Cache";
+
+/* Folder template */
+"Ordnerstruktur" = "Folder Structure";
+"Ordner-Vorlage" = "Folder Template";
+"Vorlage wählen" = "Choose Template";
+"Vorschau" = "Preview";
+"Sommer 2024" = "Summer 2024";
+"OrdnerVorlageHinweis" = "Tokens: {year}, {month}, {day}, {album}, {mediaType}. Folders are created on the server as needed.";
+
+/* Misc */
+"Server nicht erreichbar" = "Server unreachable";
+
+/* Gallery */
+"gallery.tab.title" = "Gallery";
+"gallery.album.empty" = "No photos in this album";
+"gallery.search.placeholder" = "Search files...";
+"gallery.filter.photos" = "Photos";
+"gallery.filter.videos" = "Videos";
+"gallery.filter.backedUp" = "Backed up";
+"gallery.filter.notBackedUp" = "Not backed up";
+"gallery.asset.backedUp" = "✓ Backed up";
+"gallery.asset.notBackedUp" = "Not yet backed up";
+"gallery.delete.confirm.title" = "Delete from server?";
+"gallery.delete.confirm.message" = "This will permanently remove the file from your SMB server. This cannot be undone.";
+"gallery.error.noSMB" = "Set up your SMB server in Settings to browse your gallery.";
+"gallery.error.connectionFailed" = "Could not connect to server.";
+"gallery.empty.title" = "No files found";
+"gallery.empty.subtitle" = "Your SMB share appears to be empty.";
+"gallery.unconfigured.title" = "No SMB Server";
+"tab.mediathek" = "Library";
+"tab.sammlungen" = "Collections";
+"tab.einstellungen" = "Settings";
+"mediathek.jahre" = "Years";
+"mediathek.monate" = "Months";
+"mediathek.tage" = "Days";
+"mediathek.alle" = "All";
+"sammlungen.letztetage" = "Recent Days";
+"sammlungen.meinealben" = "My Albums";
+"sammlungen.allezeigen" = "See All";
+"asset.gesichert" = "Backed up";
+"asset.nichtgesichert" = "Not backed up";
+"photos.count" = "%d Photos";
+"media.photo" = "Photo";
+"media.video" = "Video";
+"media.file" = "File";
+"%d Elemente" = "%d items";
+"Teilen" = "Share";
+"Löschen" = "Delete";

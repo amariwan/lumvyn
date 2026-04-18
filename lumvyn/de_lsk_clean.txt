@@ -1,0 +1,71 @@
+Abbrechen
+Album-Filter
+Albumnamen, getrennt durch Kommas
+Anderes Passwort verwenden
+Authentifizierung fehlgeschlagen
+Automatisch hochladen
+Beispiel: 192.168.1.10  ·  /backup/fotos
+Benutzername
+Benutzername oder Passwort fehlt, oder beides leer lassen für Gastzugriff.
+Bitte SMB-Server und Anmeldedaten konfigurieren.
+Bitte alle Felder ausfüllen, um Uploads zu aktivieren.
+Das Passwort wird sicher in der Keychain gespeichert.
+Dateien
+Diesen Ordner wählen
+Duplikate erkennen
+Einstellungen
+Elemente
+Enddatum
+Erledigte löschen
+Erneut versuchen
+Fehler
+Freigabe / Pfad
+Freigabe automatisch ausgefüllt
+Freigabe nicht gefunden
+Freigabe wählen
+Freigaben werden geladen…
+Gespeichertes Passwort verwenden
+Hintergrund-Upload
+Host ist ungültig
+Host oder IP
+Jetzt überspringen
+Keine Freigaben gefunden
+Keine Mediendateien in der Warteschlange.
+Keine Unterordner
+Konfiguration wird automatisch gespeichert.
+Konfliktlösung
+Loslegen
+Lädt hoch…
+Medientyp
+Mobilfunk erlauben
+Noch nicht konfiguriert
+Nur WLAN
+Ordner durchsuchen
+Ordner werden geladen…
+Passwort
+Passwort aus Keychain verwendet.
+Passwort ist gespeichert.
+Passwort zurücksetzen
+Port geöffnet — Anmeldung überprüfen
+Root dieser Freigabe wählen
+SMB-Konfiguration fehlt.
+SMB-Verbindung konfiguriert
+Startdatum
+Starten
+Stoppen
+Test läuft…
+Unterordner
+Upload-Zyklus
+Verbindung erfolgreich
+Verbindung testen
+Verbindung wird geprüft…
+Verbindung wird getestet…
+Verbindung zu \(host) zeitüberschritten
+Verbindungsfehler
+Verschlüsselung
+Verschlüsselungs-Passwort
+Warteschlange
+Weiter
+Zeitraum
+Übersicht
+Überspringen

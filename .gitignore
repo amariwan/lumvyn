@@ -1,0 +1,69 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode
+# Build products
+build/
+# Derived data (including device-specific temp folders)
+DerivedData*/
+Index.noindex/
+
+# User settings and workspace data
+*.xcworkspace
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad
+*.xcscmblueprint
+*.xccheckout
+
+# Xcode temporary and project files
+*.moved-aside
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+
+# Swift Package Manager
+.build/
+Packages/
+.swiftpm/
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/Build/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+
+# Archives, dSYMs and packages
+*.xcarchive
+*.ipa
+*.dSYM/
+
+# Generated and indexing files
+*.hmap
+*.app
+*.mobileprovision
+
+# Logs
+Logs/
+*.log
+
+# Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# IDEs
+.idea/
+*.iml
+
+# Misc
+*.swp
+*.lock
+.claude
