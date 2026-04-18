@@ -1,47 +1,7 @@
 import AVKit
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#endif
 
-#if canImport(UIKit)
-typealias PlatformImage = UIImage
-#elseif canImport(AppKit)
-import AppKit
-typealias PlatformImage = NSImage
-#endif
-
-private extension Image {
-    init(platformImage: PlatformImage) {
-        #if canImport(UIKit)
-        self = Image(uiImage: platformImage)
-        #elseif canImport(AppKit)
-        self = Image(nsImage: platformImage)
-        #else
-        self = Image(systemName: "photo")
-        #endif
-    }
-}
-
-private func loadPlatformImage(from fileURL: URL) -> PlatformImage? {
-    #if canImport(UIKit)
-    return PlatformImage(contentsOfFile: fileURL.path)
-    #elseif canImport(AppKit)
-    return PlatformImage(contentsOf: fileURL)
-    #else
-    return nil
-    #endif
-}
-
-private func platformImage(from data: Data) -> PlatformImage? {
-    #if canImport(UIKit)
-    return PlatformImage(data: data)
-    #elseif canImport(AppKit)
-    return PlatformImage(data: data)
-    #else
-    return nil
-    #endif
-}
+// Reuse shared platform compatibility helpers from Views/PlatformSupport.swift
 
 struct AssetDetailView: View {
     let asset: RemoteAsset

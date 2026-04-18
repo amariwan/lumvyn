@@ -50,6 +50,33 @@ struct OverviewView: View {
                 .listRowSeparator(.hidden)
             }
 
+            Section {
+                QuickActionsCard(
+                    isProcessing: queueManager.isProcessing,
+                    canStart: settingsStore.isConfigured,
+                    hasFailedItems: stats.failed > 0,
+                    hasDoneItems: stats.done > 0,
+                    onPrimaryTap: {
+                        if queueManager.isProcessing {
+                            queueManager.stopProcessing()
+                        } else {
+                            Task { await queueManager.scanLibraryAndImport() }
+                        }
+                    },
+                    onRetryTap: {
+                        Task { await queueManager.retryAll() }
+                    },
+                    onClearTap: {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                            queueManager.clearCompleted()
+                        }
+                    }
+                )
+                .listRowInsets(.init(top: 6, leading: 16, bottom: 10, trailing: 16))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
+
             // ── Configuration Warning ──────────────────────────────
             if !settingsStore.isConfigured {
                 Section {
@@ -95,6 +122,8 @@ struct OverviewView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(Color.clear)
         .animation(.spring(response: 0.45, dampingFraction: 0.82), value: queueManager.items.count)
         .animation(.spring(response: 0.40, dampingFraction: 0.85), value: settingsStore.isConfigured)
         .navigationTitle("Übersicht")
@@ -154,6 +183,78 @@ struct OverviewView: View {
     }
 }
 
+// MARK: - Quick Actions Card
+
+private struct QuickActionsCard: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let isProcessing: Bool
+    let canStart: Bool
+    let hasFailedItems: Bool
+    let hasDoneItems: Bool
+    let onPrimaryTap: () -> Void
+    let onRetryTap: () -> Void
+    let onClearTap: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Schnellaktionen")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+
+            HStack(spacing: 10) {
+                Button(action: onPrimaryTap) {
+                    Label(
+                        isProcessing ? "Stoppen" : "Starten",
+                        systemImage: isProcessing ? "stop.fill" : "play.fill"
+                    )
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color(red: 0.10, green: 0.56, blue: 0.96))
+                .disabled(!canStart && !isProcessing)
+
+                if hasFailedItems {
+                    Button(action: onRetryTap) {
+                        Label("Erneut", systemImage: "arrow.clockwise")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                if hasDoneItems {
+                    Button(action: onClearTap) {
+                        Label("Leeren", systemImage: "checkmark.circle.badge.xmark")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        }
+        .padding(16)
+        .background(
+            LinearGradient(
+                colors: colorScheme == .dark
+                    ? [Color.platformSecondaryBackground.opacity(0.14), Color.platformSystemBackground.opacity(0.06)]
+                    : [Color.white.opacity(0.65), Color.white.opacity(0.45)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.platformSeparator.opacity(colorScheme == .dark ? 0.22 : 0.18), lineWidth: 0.8)
+        )
+    }
+}
+
 // MARK: - Files Section Header
 
 private struct FilesSectionHeader: View {
@@ -183,6 +284,8 @@ private struct DashboardCard: View {
     let isProcessing: Bool
     let uploadRate:   Double
     let stats:        QueueStats
+
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -225,7 +328,7 @@ private struct DashboardCard: View {
             .padding(.bottom, 16)
 
             Rectangle()
-                .fill(Color(.separator).opacity(0.45))
+                .fill(Color.platformSeparator.opacity(0.45))
                 .frame(height: 0.5)
                 .padding(.horizontal, -20)
 
@@ -242,8 +345,9 @@ private struct DashboardCard: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(Color(.separator).opacity(0.55), lineWidth: 0.5)
+                .strokeBorder(Color.platformSeparator.opacity(0.55), lineWidth: 0.5)
         )
+        .shadow(color: colorScheme == .dark ? Color.black.opacity(0.25) : Color.black.opacity(0.08), radius: 16, x: 0, y: 8)
     }
 }
 
@@ -298,7 +402,7 @@ private struct ProgressRing: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(Color(.systemFill), lineWidth: lineWidth)
+                .stroke(Color.platformSystemFill, lineWidth: lineWidth)
 
             Circle()
                 .trim(from: 0, to: max(0, min(1, progress)))

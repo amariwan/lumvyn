@@ -333,6 +333,7 @@ final class SMBClient: SMBClientProtocol {
             return localURL
         } catch {
             try? await client.disconnectShare()
+            try? FileManager.default.removeItem(at: localURL)
             throw SMBClientError.connectionFailed(error)
         }
         #else

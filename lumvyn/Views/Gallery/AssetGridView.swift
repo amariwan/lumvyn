@@ -1,9 +1,4 @@
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#elseif canImport(AppKit)
-import AppKit
-#endif
 
 struct AssetGridView: View {
     let album: RemoteAlbum
@@ -71,12 +66,6 @@ struct AssetGridView: View {
         }
         .navigationTitle(album.name)
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(for: AssetNavigation.self) { nav in
-            AssetDetailView(asset: nav.asset, siblings: nav.siblings)
-        }
-        .navigationDestination(for: RemoteAlbum.self) { album in
-            AssetGridView(album: album)
-        }
         .task(id: album.path) {
             await reload()
         }
@@ -98,9 +87,11 @@ struct AssetGridView: View {
         } message: { _ in
             Text(LocalizedStringKey("gallery.delete.confirm.message"))
         }
+        #if canImport(UIKit)
         .sheet(item: $sharedItem) { item in
             ActivityView(activityItems: [item.url])
         }
+        #endif
     }
 
     private func reload() async {
@@ -164,20 +155,20 @@ struct SubfolderStrip: View {
 struct SubfolderCell: View {
     let folder: RemoteAlbum
     @EnvironmentObject private var galleryStore: GalleryStore
-    @State private var thumbnail: UIImage? = nil
+    @State private var thumbnail: PlatformImage? = nil
 
     var body: some View {
         VStack(spacing: 6) {
             ZStack {
-                Color(.secondarySystemBackground)
+                Color.platformSecondaryBackground
                 if let thumbnail {
-                    Image(uiImage: thumbnail)
+                    Image(platformImage: thumbnail)
                         .resizable()
                         .scaledToFill()
                 } else {
                     Image(systemName: "photo.stack")
                         .font(.system(size: 22))
-                        .foregroundStyle(Color(.tertiaryLabel))
+                        .foregroundStyle(Color.platformTertiaryLabel)
                 }
             }
             .frame(width: 76, height: 76)
@@ -191,7 +182,7 @@ struct SubfolderCell: View {
         }
         .task {
             if let data = await galleryStore.coverThumbnail(for: folder),
-               let img = UIImage(data: data) {
+               let img = platformImage(from: data) {
                 thumbnail = img
             }
         }
@@ -201,16 +192,16 @@ struct SubfolderCell: View {
 struct AssetCellView: View {
     let asset: RemoteAsset
     @EnvironmentObject private var galleryStore: GalleryStore
-    @State private var thumbnail: UIImage? = nil
+    @State private var thumbnail: PlatformImage? = nil
     @State private var loadFailed = false
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                Color(.secondarySystemBackground)
+                Color.platformSecondaryBackground
 
                 if let thumbnail {
-                    Image(uiImage: thumbnail)
+                    Image(platformImage: thumbnail)
                         .resizable()
                         .scaledToFill()
                         .frame(width: geo.size.width, height: geo.size.height)
@@ -250,7 +241,7 @@ struct AssetCellView: View {
         .task(id: asset.remotePath) {
             let result = await galleryStore.thumbnail(for: asset)
             if Task.isCancelled { return }
-            if let result, let img = UIImage(data: result) {
+            if let result, let img = platformImage(from: result) {
                 thumbnail = img
             } else {
                 loadFailed = true
@@ -259,12 +250,22 @@ struct AssetCellView: View {
     }
 }
 
+#if canImport(UIKit)
 struct ActivityView: UIViewControllerRepresentable {
     let activityItems: [Any]
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+        let controller = UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+        controller.completionWithItemsHandler = { _, _, _, _ in
+            for item in activityItems {
+                if let url = item as? URL, url.isFileURL {
+                    try? FileManager.default.removeItem(at: url)
+                }
+            }
+        }
+        return controller
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
+#endif

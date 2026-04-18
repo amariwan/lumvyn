@@ -33,24 +33,21 @@ struct AlbumGridView: View {
         .refreshable {
             await galleryStore.loadAlbums()
         }
-        .navigationDestination(for: RemoteAlbum.self) { album in
-            AssetGridView(album: album)
-        }
     }
 }
 
 struct AlbumCardView: View {
     let album: RemoteAlbum
     @EnvironmentObject private var galleryStore: GalleryStore
-    @State private var thumbnail: UIImage? = nil
+    @State private var thumbnail: PlatformImage? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             GeometryReader { geo in
                 ZStack {
-                    Color(.secondarySystemBackground)
+                    Color.platformSecondaryBackground
                     if let thumbnail {
-                        Image(uiImage: thumbnail)
+                        Image(platformImage: thumbnail)
                             .resizable()
                             .scaledToFill()
                             .frame(width: geo.size.width, height: geo.size.height)
@@ -58,7 +55,7 @@ struct AlbumCardView: View {
                     } else {
                         Image(systemName: "photo")
                             .font(.system(size: 24))
-                            .foregroundStyle(Color(.tertiaryLabel))
+                            .foregroundStyle(Color.platformTertiaryLabel)
                     }
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
@@ -81,7 +78,7 @@ struct AlbumCardView: View {
         }
         .task {
             if let data = await galleryStore.coverThumbnail(for: album),
-               let img = UIImage(data: data) {
+               let img = platformImage(from: data) {
                 thumbnail = img
             }
         }

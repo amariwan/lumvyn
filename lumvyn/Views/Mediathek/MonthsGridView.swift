@@ -61,7 +61,7 @@ struct MonthsGridView: View {
 struct MonthCell: View {
     let month: MonthGroup
     @EnvironmentObject private var galleryStore: GalleryStore
-    @State private var thumbnail: UIImage? = nil
+    @State private var thumbnail: PlatformImage? = nil
 
     private var label: String {
         let f = DateFormatter()
@@ -72,9 +72,9 @@ struct MonthCell: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .bottomLeading) {
-                Color(.secondarySystemBackground)
+                Color.platformSecondaryBackground
                 if let thumbnail {
-                    Image(uiImage: thumbnail)
+                    Image(platformImage: thumbnail)
                         .resizable()
                         .scaledToFill()
                         .frame(width: geo.size.width, height: geo.size.height)
@@ -103,7 +103,7 @@ struct MonthCell: View {
         .task {
             if let cover = month.cover,
                let data = await galleryStore.thumbnail(for: cover),
-               let img = UIImage(data: data) {
+               let img = platformImage(from: data) {
                 thumbnail = img
             }
         }

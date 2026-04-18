@@ -100,20 +100,20 @@ struct SammlungenView: View {
 struct RecentDayCard: View {
     let day: DayGroup
     @EnvironmentObject private var galleryStore: GalleryStore
-    @State private var thumbnail: UIImage? = nil
+    @State private var thumbnail: PlatformImage? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ZStack {
-                Color(.secondarySystemBackground)
+                Color.platformSecondaryBackground
                 if let thumbnail {
-                    Image(uiImage: thumbnail)
+                    Image(platformImage: thumbnail)
                         .resizable()
                         .scaledToFill()
                 } else {
                     Image(systemName: "photo")
                         .font(.system(size: 24))
-                        .foregroundStyle(Color(.tertiaryLabel))
+                        .foregroundStyle(Color.platformTertiaryLabel)
                 }
             }
             .frame(width: 160, height: 160)
@@ -135,7 +135,7 @@ struct RecentDayCard: View {
         .task {
             if let cover = day.cover,
                let data = await galleryStore.thumbnail(for: cover),
-               let img = UIImage(data: data) {
+               let img = platformImage(from: data) {
                 thumbnail = img
             }
         }

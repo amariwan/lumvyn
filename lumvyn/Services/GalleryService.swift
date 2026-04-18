@@ -172,7 +172,7 @@ final class GalleryService: @unchecked Sendable {
             case .photo:
                 return try Self.makeImageThumbnail(at: localURL, maxPixel: pixels)
             case .video:
-                return try Self.makeVideoThumbnail(at: localURL, maxPixel: pixels)
+                return try await Self.makeVideoThumbnail(at: localURL, maxPixel: pixels)
             case .unknown:
                 throw GalleryError.loadFailed("Unsupported media type")
             }
@@ -280,14 +280,46 @@ final class GalleryService: @unchecked Sendable {
         return try encodeJPEG(thumb)
     }
 
-    private static func makeVideoThumbnail(at url: URL, maxPixel: Int) throws -> Data {
+    private static func makeVideoThumbnail(at url: URL, maxPixel: Int) async throws -> Data {
         let asset = AVURLAsset(url: url)
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         generator.maximumSize = CGSize(width: maxPixel, height: maxPixel)
         let time = CMTime(seconds: 0.0, preferredTimescale: 600)
-        let cgImage = try generator.copyCGImage(at: time, actualTime: nil)
-        return try encodeJPEG(cgImage)
+
+        return try await awaitThumbnail(from: generator, at: time)
+    }
+
+    private static func awaitThumbnail(from generator: AVAssetImageGenerator, at time: CMTime) async throws -> Data {
+        var gen: AVAssetImageGenerator? = generator
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let times = [NSValue(time: time)]
+                gen?.generateCGImagesAsynchronously(forTimes: times) { _, cgImage, actualTime, result, error in
+                    switch result {
+                    case .succeeded:
+                        if let image = cgImage {
+                            do {
+                                let data = try encodeJPEG(image)
+                                continuation.resume(returning: data)
+                            } catch {
+                                continuation.resume(throwing: error)
+                            }
+                        } else {
+                            continuation.resume(throwing: GalleryError.loadFailed("Thumbnail image missing"))
+                        }
+                    case .failed:
+                        continuation.resume(throwing: error ?? GalleryError.loadFailed("Thumbnail generation failed"))
+                    case .cancelled:
+                        continuation.resume(throwing: CancellationError())
+                    @unknown default:
+                        continuation.resume(throwing: GalleryError.loadFailed("Unknown thumbnail generation result"))
+                    }
+                }
+            }
+        } onCancel: {
+            gen?.cancelAllCGImageGeneration()
+        }
     }
 
     private static func encodeJPEG(_ image: CGImage) throws -> Data {

@@ -42,14 +42,14 @@ struct YearsGridView: View {
 struct YearCell: View {
     let year: YearGroup
     @EnvironmentObject private var galleryStore: GalleryStore
-    @State private var thumbnail: UIImage? = nil
+    @State private var thumbnail: PlatformImage? = nil
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .bottomLeading) {
-                Color(.secondarySystemBackground)
+                Color.platformSecondaryBackground
                 if let thumbnail {
-                    Image(uiImage: thumbnail)
+                    Image(platformImage: thumbnail)
                         .resizable()
                         .scaledToFill()
                         .frame(width: geo.size.width, height: geo.size.height)
@@ -78,7 +78,7 @@ struct YearCell: View {
         .task {
             if let cover = year.cover,
                let data = await galleryStore.thumbnail(for: cover),
-               let img = UIImage(data: data) {
+               let img = platformImage(from: data) {
                 thumbnail = img
             }
         }
