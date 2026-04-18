@@ -62,6 +62,7 @@ final class SettingsStore: ObservableObject {
     @Published var isTestingConnection: Bool = false
 
     private var savedPasswordCache: String? = nil
+    private var savedEncryptionPasswordCache: String? = nil
 
     private let defaults = UserDefaults.standard
     private let smbClient: SMBClientProtocol
@@ -194,6 +195,7 @@ final class SettingsStore: ObservableObject {
             let enc = KeychainStorage.string(forKey: keys.encryptionPassword)
             await MainActor.run {
                 self.savedPasswordCache = saved
+                self.savedEncryptionPasswordCache = enc
                 if self.encryptionPassword.isEmpty {
                     self.encryptionPassword = enc ?? ""
                 }
@@ -223,8 +225,11 @@ final class SettingsStore: ObservableObject {
         defaults.set(syncMode.rawValue, forKey: Keys.syncMode)
         defaults.set(folderTemplate, forKey: Keys.folderTemplate)
 
-        setSecureValue(password.isEmpty ? nil : password, forKey: Keys.password)
-        setSecureValue(encryptionPassword.isEmpty ? nil : encryptionPassword, forKey: Keys.encryptionPassword)
+        let passwordToPersist = password.isEmpty ? savedPasswordCache : password
+        setSecureValue(passwordToPersist?.isEmpty == false ? passwordToPersist : nil, forKey: Keys.password)
+
+        let encryptionPasswordToPersist = encryptionPassword.isEmpty ? savedEncryptionPasswordCache : encryptionPassword
+        setSecureValue(encryptionPasswordToPersist?.isEmpty == false ? encryptionPasswordToPersist : nil, forKey: Keys.encryptionPassword)
 
         if let language = selectedLanguage {
             defaults.set(language, forKey: Keys.language)
@@ -312,7 +317,10 @@ final class SettingsStore: ObservableObject {
                     await MainActor.run { self.savedPasswordCache = saved }
                 } else if key == Keys.encryptionPassword {
                     let enc = KeychainStorage.string(forKey: key)
-                    await MainActor.run { self.encryptionPassword = enc ?? "" }
+                    await MainActor.run {
+                        self.savedEncryptionPasswordCache = enc
+                        self.encryptionPassword = enc ?? ""
+                    }
                 }
             } catch {
                 await MainActor.run { NSLog("Keychain error for %{public}@ - %{public}@", key, String(describing: error)) }
