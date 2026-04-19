@@ -47,9 +47,29 @@ final class DuplicateAlbumService {
             }
         }
 
+        // Build a set of duplicate asset identifiers, excluding one canonical "original"
+        // per fingerprint group. We pick the original as the asset with the earliest
+        // creation date (best-effort); the rest are considered duplicates.
         var duplicateIDs = Set<String>()
         for (_, ids) in variantMap where ids.count > 1 {
-            duplicateIDs.formUnion(ids)
+            // Fetch PHAsset objects for these identifiers so we can compare creationDate
+            let fetch = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil)
+            var groupAssets: [PHAsset] = []
+            fetch.enumerateObjects { asset, _, _ in groupAssets.append(asset) }
+
+            // Sort by creationDate ascending (earliest first). If creationDate missing,
+            // treat as very recent to avoid keeping unknown as original.
+            groupAssets.sort { a, b in
+                let ta = a.creationDate?.timeIntervalSince1970 ?? Double.greatestFiniteMagnitude
+                let tb = b.creationDate?.timeIntervalSince1970 ?? Double.greatestFiniteMagnitude
+                return ta < tb
+            }
+
+            // Keep the first (original), mark the rest as duplicates
+            if groupAssets.count > 1 {
+                let duplicates = groupAssets.dropFirst().map { $0.localIdentifier }
+                duplicateIDs.formUnion(duplicates)
+            }
         }
 
         guard !duplicateIDs.isEmpty else {
@@ -82,11 +102,11 @@ final class DuplicateAlbumService {
             return existing
         }
 
-        return try await withCheckedThrowingContinuation { cont in
+        return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<PHAssetCollection, Error>) in
             var localId: String? = nil
             PHPhotoLibrary.shared().performChanges({
                 let createReq = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: name)
-                localId = createReq.placeholderForCreatedAssetCollection?.localIdentifier
+                localId = createReq.placeholderForCreatedAssetCollection.localIdentifier
             }, completionHandler: { success, error in
                 if let error = error {
                     cont.resume(throwing: error)
@@ -105,7 +125,7 @@ final class DuplicateAlbumService {
     }
 
     private func replaceAssets(in collection: PHAssetCollection, with assets: PHFetchResult<PHAsset>) async throws {
-        try await withCheckedThrowingContinuation { cont in
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             PHPhotoLibrary.shared().performChanges({
                 if let req = PHAssetCollectionChangeRequest(for: collection) {
                     let current = PHAsset.fetchAssets(in: collection, options: nil)

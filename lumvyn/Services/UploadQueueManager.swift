@@ -505,7 +505,7 @@ final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
                                     for v in variants { await dedup.markUploaded(fingerprint: v) }
                                 }
                                 // clear stored variants for this item
-                                self.fingerprintVariantsMap[itemCopy.id] = nil
+                                await MainActor.run { self.fingerprintVariantsMap[itemCopy.id] = nil }
                             }
 
                             return true
