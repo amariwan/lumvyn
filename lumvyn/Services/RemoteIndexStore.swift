@@ -21,14 +21,15 @@ actor RemoteIndexStore {
         fileURL = dir.appendingPathComponent(fileName)
 
         if FileManager.default.fileExists(atPath: fileURL.path) {
+            let fileURLCopy = fileURL
             let detached = Task.detached { () throws -> [String: Entry] in
-                let data = try Data(contentsOf: fileURL)
+                let data = try Data(contentsOf: fileURLCopy)
                 return try JSONDecoder().decode([String: Entry].self, from: data)
             }
             Task { // actor-isolated task to assign results
                 do {
                     let decoded = try await detached.value
-                    self.map = decoded
+                    await self.replaceMap(decoded)
                 } catch {
                     NSLog("RemoteIndexStore load error: %@", String(describing: error))
                 }
@@ -71,6 +72,10 @@ actor RemoteIndexStore {
                 NSLog("RemoteIndexStore persist error: %@", String(describing: error))
             }
         }
+    }
+
+    private func replaceMap(_ newMap: [String: Entry]) {
+        map = newMap
     }
 
 }

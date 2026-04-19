@@ -25,6 +25,7 @@ final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
     private let inAppNotifications: InAppNotificationCenter?
     private let mirrorSyncEngine = MirrorSyncEngine()
     private var cancellables = Set<AnyCancellable>()
+    private var fingerprintVariantsMap: [UUID: [String]] = [:]
     private var processingTask: Task<Void, Never>?
     private let networkMonitor = NetworkMonitor.shared
     private weak var photoLibraryWatcher: PhotoLibraryWatcher?
@@ -270,16 +271,24 @@ final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
             }.value
 
             var fingerprint: String? = nil
-                if settingsStore.deduplicationEnabled, let dedup = deduplicationService {
-                    do {
-                        fingerprint = try await dedup.fingerprint(for: asset)
-                        if let fp = fingerprint, await dedup.contains(fp) {
-                            continue
+            var fingerprintVariants: [String] = []
+            if settingsStore.deduplicationEnabled, let dedup = deduplicationService {
+                do {
+                    fingerprintVariants = try await dedup.fingerprints(for: asset)
+                    var skip = false
+                    for fp in fingerprintVariants {
+                        if await dedup.contains(fp) {
+                            skip = true
+                            break
                         }
-                    } catch {
-                        fingerprint = nil
                     }
+                    if skip { continue }
+                    // keep the file-bytes fingerprint as the canonical stored value (preserves prior behavior)
+                    fingerprint = fingerprintVariants.first
+                } catch {
+                    fingerprint = nil
                 }
+            }
 
             let item = UploadItem(
                 assetLocalIdentifier: snapshot.localIdentifier,
@@ -302,6 +311,9 @@ final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
             )
 
             newItems.append(item)
+            if !fingerprintVariants.isEmpty {
+                fingerprintVariantsMap[item.id] = fingerprintVariants
+            }
         }
 
         items.append(contentsOf: newItems)
@@ -429,6 +441,8 @@ final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
             await withTaskGroup(of: Bool.self) { group in
                 for item in batch {
                     let itemCopy = item
+                    // capture fingerprint variants for this item so background tasks can mark all of them
+                    let variantsForItem = fingerprintVariantsMap[itemCopy.id]
                     // Snapshot settings needed for background work
                     let host = settingsStore.host
                     let sharePath = settingsStore.sharePath
@@ -485,8 +499,13 @@ final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
                                     await index.saveMapping(localId: itemCopy.assetLocalIdentifier, host: host, sharePath: sharePath, remotePath: finalRemotePath, fingerprint: itemCopy.fingerprint)
                                 }
                             }
-                            if deduplicationEnabled, let fp = itemCopy.fingerprint, let dedup = self.deduplicationService {
-                                Task { await dedup.markUploaded(fingerprint: fp) }
+                            if deduplicationEnabled, let dedup = self.deduplicationService {
+                                let variants = variantsForItem ?? (itemCopy.fingerprint.map { [$0] } ?? [])
+                                Task {
+                                    for v in variants { await dedup.markUploaded(fingerprint: v) }
+                                }
+                                // clear stored variants for this item
+                                self.fingerprintVariantsMap[itemCopy.id] = nil
                             }
 
                             return true
@@ -576,8 +595,10 @@ final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
                     await index.saveMapping(localId: item.assetLocalIdentifier, host: host, sharePath: sharePath, remotePath: finalRemotePath, fingerprint: item.fingerprint)
                 }
             }
-            if settingsStore.deduplicationEnabled, let fp = item.fingerprint, let dedup = deduplicationService {
-                await dedup.markUploaded(fingerprint: fp)
+            if settingsStore.deduplicationEnabled, let dedup = deduplicationService {
+                let variants = fingerprintVariantsMap[item.id] ?? (item.fingerprint.map { [$0] } ?? [])
+                for v in variants { await dedup.markUploaded(fingerprint: v) }
+                fingerprintVariantsMap[item.id] = nil
             }
         } catch {
             let nsError = error as NSError
