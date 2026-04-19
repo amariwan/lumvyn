@@ -69,6 +69,10 @@ final class PhotoLibraryWatcher: NSObject, ObservableObject, PHPhotoLibraryChang
 
         delegate?.photoLibraryWatcher(self, didDetect: assets)
         lastScanDate = Date()
+
+        Task.detached(priority: .utility) {
+            await DuplicateAlbumService.shared.scanAndPopulateAlbum()
+        }
     }
 
     private func fetchRecentAssets() -> [PHAsset] {
