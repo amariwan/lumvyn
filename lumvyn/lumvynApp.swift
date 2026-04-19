@@ -23,20 +23,27 @@ struct lumvynApp: App {
 
     @MainActor
     init() {
-        let settings = SettingsStore()
+        // shared infrastructure / dependency injection
+        let smbClient = SMBClient()
+        let settingsRepo = UserDefaultsSettingsRepository()
+        let connectionService = ConnectionService(smbClient: smbClient)
+
+        let settings = SettingsStore(smbClient: smbClient, repository: settingsRepo, connectionService: connectionService)
         // Apply persisted app language (nil means system default)
         Bundle.setLanguage(settings.selectedLanguage)
+
         let watcher = PhotoLibraryWatcher()
         let dedup = DeduplicationService()
         let remoteIndex = RemoteIndexStore()
         let remoteDeletionQueue = RemoteDeletionQueue()
         let inApp = InAppNotificationCenter.shared
-        let smbClient = SMBClient()
+
         let queue = UploadQueueManager(
             smbClient: smbClient, settingsStore: settings, watcher: watcher,
             deduplicationService: dedup, remoteIndex: remoteIndex,
             remoteDeletionQueue: remoteDeletionQueue, inAppNotifications: inApp)
         watcher.delegate = queue
+
         let galleryService = GalleryService(
             smbClient: smbClient,
             cache: GalleryThumbnailCache(),

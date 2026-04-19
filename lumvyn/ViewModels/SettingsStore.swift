@@ -71,17 +71,40 @@ final class SettingsStore: ObservableObject {
     private var securePasswordDirty: Bool = false
     private var secureEncryptionDirty: Bool = false
 
-    private var reconnectTask: Task<Void, Never>? = nil
-
-    private let defaults = UserDefaults.standard
+    private let repository: SettingsRepositoryProtocol
     private let smbClient: SMBClientProtocol
+    private let connectionService: ConnectionServiceProtocol
 
     var browserClient: any SMBClientProtocol { smbClient }
     private var cancellables = Set<AnyCancellable>()
     private var notificationTokens: [NSObjectProtocol] = []
 
-    init(smbClient: SMBClientProtocol? = nil) {
+    init(smbClient: SMBClientProtocol? = nil, repository: SettingsRepositoryProtocol? = nil, connectionService: ConnectionServiceProtocol? = nil) {
         self.smbClient = smbClient ?? SMBClient()
+        self.repository = repository ?? UserDefaultsSettingsRepository()
+        self.connectionService = connectionService ?? ConnectionService(smbClient: self.smbClient)
+
+        // Subscribe to connection service updates and mirror into this store's published properties
+        self.connectionService.connectionStatusPublisher
+            .receive(on: RunLoop.main)
+            .sink { [weak self] status in self?.connectionStatus = status }
+            .store(in: &cancellables)
+
+        self.connectionService.connectionErrorPublisher
+            .receive(on: RunLoop.main)
+            .sink { [weak self] err in self?.connectionError = err }
+            .store(in: &cancellables)
+
+        self.connectionService.lastConnectionSucceededPublisher
+            .receive(on: RunLoop.main)
+            .sink { [weak self] ok in self?.lastConnectionSucceeded = ok }
+            .store(in: &cancellables)
+
+        self.connectionService.isTestingConnectionPublisher
+            .receive(on: RunLoop.main)
+            .sink { [weak self] testing in self?.isTestingConnection = testing }
+            .store(in: &cancellables)
+
         loadSettings()
         setupAutoSave()
         #if os(iOS)
@@ -98,7 +121,9 @@ final class SettingsStore: ObservableObject {
     }
 
     deinit {
-        reconnectTask?.cancel()
+        Task { @MainActor in
+            connectionService.cancelReconnect()
+        }
         for token in notificationTokens {
             NotificationCenter.default.removeObserver(token)
         }
@@ -167,11 +192,12 @@ final class SettingsStore: ObservableObject {
             .dropFirst()
             .debounce(for: .seconds(1), scheduler: RunLoop.main)
             .sink { [weak self] _ in
-                self?.requestReconnect()
+                guard let self = self else { return }
+                self.connectionService.requestReconnect(host: self.host, sharePath: self.sharePath, credentials: self.credentials, initialDelay: .milliseconds(200))
             }
             .store(in: &cancellables)
 
-        requestReconnect(initialDelay: .milliseconds(200))
+        connectionService.requestReconnect(host: host, sharePath: sharePath, credentials: credentials, initialDelay: .milliseconds(200))
     }
 
     private struct ConnectionKey: Equatable {
@@ -181,17 +207,7 @@ final class SettingsStore: ObservableObject {
         let password: String
     }
 
-    @MainActor
-    private func requestReconnect(initialDelay: DispatchTimeInterval = .milliseconds(0)) {
-        reconnectTask?.cancel()
-        reconnectTask = Task { [weak self] in
-            if case .milliseconds(let ms) = initialDelay, ms > 0 {
-                try? await Task.sleep(nanoseconds: UInt64(ms) * 1_000_000)
-            }
-            if Task.isCancelled { return }
-            await self?.autoReconnectIfNeeded()
-        }
-    }
+
 
     private func makeSavePublisher<P>(_ publisher: Published<P>.Publisher) -> AnyPublisher<Void, Never> {
         publisher.map { _ in () }.eraseToAnyPublisher()
@@ -216,91 +232,71 @@ final class SettingsStore: ObservableObject {
             return
         }
 
-        reconnectTask?.cancel()
-        reconnectTask = nil
-
-        isTestingConnection = true
-        defer { isTestingConnection = false }
-
-        let status = await smbClient.connectionStatus(host: host, sharePath: sharePath, credentials: credentials)
-        connectionStatus = status
-        switch status {
-        case .ready, .authenticated:
-            do {
-                try await smbClient.probeWrite(host: host, sharePath: sharePath, credentials: credentials ?? SMBCredentials(username: "", password: ""))
-                connectionError = nil
-                lastConnectionSucceeded = true
-            } catch {
-                connectionError = (error as NSError).localizedDescription
-                lastConnectionSucceeded = false
-            }
-        default:
-            connectionError = status.message ?? NSLocalizedString("SMB-Konfiguration fehlt.", comment: "missing smb config")
-            lastConnectionSucceeded = false
-        }
+        connectionService.cancelReconnect()
+        await connectionService.testConnection(host: host, sharePath: sharePath, credentials: credentials)
     }
 
     private func loadSettings() {
-        let loadedHost = defaults.string(forKey: Keys.host)?.trimmed ?? ""
+        let loadedHost = repository.string(forKey: Keys.host)?.trimmed ?? ""
         host = loadedHost.isEmpty ? Self.defaultHost : loadedHost
 
-        let loadedSharePath = defaults.string(forKey: Keys.sharePath)?.trimmed ?? ""
+        let loadedSharePath = repository.string(forKey: Keys.sharePath)?.trimmed ?? ""
         sharePath = loadedSharePath.isEmpty ? Self.defaultSharePath : loadedSharePath
 
-        username = defaults.string(forKey: Keys.username) ?? ""
-        autoUploadEnabled = defaults.bool(forKey: Keys.autoUpload, defaultValue: true)
-        backgroundUploadEnabled = defaults.bool(forKey: Keys.backgroundUpload, defaultValue: true)
-        wifiOnlyUpload = defaults.bool(forKey: Keys.wifiOnly, defaultValue: false)
-        allowCellularUpload = defaults.bool(forKey: Keys.allowCellular, defaultValue: false)
-        uploadSchedule = defaults.enum(forKey: Keys.uploadSchedule, defaultValue: .immediate)
-        mediaTypeFilter = defaults.enum(forKey: Keys.mediaTypeFilter, defaultValue: .all)
-        dateRangeType = defaults.enum(forKey: Keys.dateRangeType, defaultValue: .allTime)
-        customDateRangeStart = defaults.object(forKey: Keys.dateRangeStart) as? Date
-        customDateRangeEnd = defaults.object(forKey: Keys.dateRangeEnd) as? Date
-        albumFilterEnabled = defaults.bool(forKey: Keys.albumFilterEnabled, defaultValue: false)
-        selectedAlbums = defaults.stringArray(forKey: Keys.selectedAlbums) ?? []
-        conflictResolution = defaults.enum(forKey: Keys.conflictResolution, defaultValue: .rename)
-        encryptionEnabled = defaults.bool(forKey: Keys.encryptionEnabled, defaultValue: false)
-        maxConcurrentUploads = defaults.object(forKey: Keys.maxConcurrentUploads) as? Int ?? 2
-        deduplicationEnabled = defaults.bool(forKey: Keys.deduplication, defaultValue: true)
-        syncMode = defaults.enum(forKey: Keys.syncMode, defaultValue: .backup)
-        let storedTemplate = defaults.string(forKey: Keys.folderTemplate)?.trimmed ?? ""
+        username = repository.string(forKey: Keys.username) ?? ""
+        autoUploadEnabled = repository.bool(forKey: Keys.autoUpload, defaultValue: true)
+        backgroundUploadEnabled = repository.bool(forKey: Keys.backgroundUpload, defaultValue: true)
+        wifiOnlyUpload = repository.bool(forKey: Keys.wifiOnly, defaultValue: false)
+        allowCellularUpload = repository.bool(forKey: Keys.allowCellular, defaultValue: false)
+        uploadSchedule = repository.enumValue(forKey: Keys.uploadSchedule, defaultValue: .immediate)
+        mediaTypeFilter = repository.enumValue(forKey: Keys.mediaTypeFilter, defaultValue: .all)
+        dateRangeType = repository.enumValue(forKey: Keys.dateRangeType, defaultValue: .allTime)
+        customDateRangeStart = repository.object(forKey: Keys.dateRangeStart) as? Date
+        customDateRangeEnd = repository.object(forKey: Keys.dateRangeEnd) as? Date
+        albumFilterEnabled = repository.bool(forKey: Keys.albumFilterEnabled, defaultValue: false)
+        selectedAlbums = repository.stringArray(forKey: Keys.selectedAlbums) ?? []
+        conflictResolution = repository.enumValue(forKey: Keys.conflictResolution, defaultValue: .rename)
+        encryptionEnabled = repository.bool(forKey: Keys.encryptionEnabled, defaultValue: false)
+        maxConcurrentUploads = repository.object(forKey: Keys.maxConcurrentUploads) as? Int ?? 2
+        deduplicationEnabled = repository.bool(forKey: Keys.deduplication, defaultValue: true)
+        syncMode = repository.enumValue(forKey: Keys.syncMode, defaultValue: .backup)
+        let storedTemplate = repository.string(forKey: Keys.folderTemplate)?.trimmed ?? ""
         folderTemplate = storedTemplate.isEmpty ? FolderTemplateResolver.defaultTemplate : storedTemplate
-        if let language = defaults.string(forKey: Keys.language), language != "system" {
+        if let language = repository.string(forKey: Keys.language), language != "system" {
             selectedLanguage = language
         } else {
             selectedLanguage = nil
         }
 
-        savedPasswordCache = KeychainStorage.string(forKey: Keys.password)
+        savedPasswordCache = repository.secureString(forKey: Keys.password)
         password = ""
 
-        savedEncryptionPasswordCache = KeychainStorage.string(forKey: Keys.encryptionPassword)
+        savedEncryptionPasswordCache = repository.secureString(forKey: Keys.encryptionPassword)
         encryptionPassword = ""
         secureValuesLoaded = true
     }
 
     func saveSettings() {
-        defaults.set(host, forKey: Keys.host)
-        defaults.set(sharePath, forKey: Keys.sharePath)
-        defaults.set(username, forKey: Keys.username)
-        defaults.set(autoUploadEnabled, forKey: Keys.autoUpload)
-        defaults.set(backgroundUploadEnabled, forKey: Keys.backgroundUpload)
-        defaults.set(wifiOnlyUpload, forKey: Keys.wifiOnly)
-        defaults.set(allowCellularUpload, forKey: Keys.allowCellular)
-        defaults.set(uploadSchedule.rawValue, forKey: Keys.uploadSchedule)
-        defaults.set(mediaTypeFilter.rawValue, forKey: Keys.mediaTypeFilter)
-        defaults.set(dateRangeType.rawValue, forKey: Keys.dateRangeType)
-        defaults.set(customDateRangeStart, forKey: Keys.dateRangeStart)
-        defaults.set(customDateRangeEnd, forKey: Keys.dateRangeEnd)
-        defaults.set(albumFilterEnabled, forKey: Keys.albumFilterEnabled)
-        defaults.set(selectedAlbums, forKey: Keys.selectedAlbums)
-        defaults.set(conflictResolution.rawValue, forKey: Keys.conflictResolution)
-        defaults.set(encryptionEnabled, forKey: Keys.encryptionEnabled)
-        defaults.set(maxConcurrentUploads, forKey: Keys.maxConcurrentUploads)
-        defaults.set(deduplicationEnabled, forKey: Keys.deduplication)
-        defaults.set(syncMode.rawValue, forKey: Keys.syncMode)
-        defaults.set(folderTemplate, forKey: Keys.folderTemplate)
+        repository.set(host, forKey: Keys.host)
+        repository.set(sharePath, forKey: Keys.sharePath)
+        repository.set(username, forKey: Keys.username)
+        repository.set(autoUploadEnabled, forKey: Keys.autoUpload)
+        repository.set(backgroundUploadEnabled, forKey: Keys.backgroundUpload)
+        repository.set(wifiOnlyUpload, forKey: Keys.wifiOnly)
+        repository.set(allowCellularUpload, forKey: Keys.allowCellular)
+        repository.setEnum(uploadSchedule, forKey: Keys.uploadSchedule)
+        repository.setEnum(mediaTypeFilter, forKey: Keys.mediaTypeFilter)
+        repository.setEnum(dateRangeType, forKey: Keys.dateRangeType)
+        repository.setObject(customDateRangeStart, forKey: Keys.dateRangeStart)
+        repository.setObject(customDateRangeEnd, forKey: Keys.dateRangeEnd)
+        repository.set(albumFilterEnabled, forKey: Keys.albumFilterEnabled)
+        repository.setObject(selectedAlbums, forKey: Keys.selectedAlbums)
+        repository.setEnum(conflictResolution, forKey: Keys.conflictResolution)
+        repository.set(encryptionEnabled, forKey: Keys.encryptionEnabled)
+        repository.setObject(maxConcurrentUploads, forKey: Keys.maxConcurrentUploads)
+        repository.set(deduplicationEnabled, forKey: Keys.deduplication)
+        repository.setEnum(syncMode, forKey: Keys.syncMode)
+        repository.set(folderTemplate, forKey: Keys.folderTemplate)
 
         if securePasswordDirty {
             if !password.isEmpty {
@@ -317,9 +313,9 @@ final class SettingsStore: ObservableObject {
         }
 
         if let language = selectedLanguage {
-            defaults.set(language, forKey: Keys.language)
+            repository.set(language, forKey: Keys.language)
         } else {
-            defaults.removeObject(forKey: Keys.language)
+            repository.set(nil, forKey: Keys.language)
         }
     }
 
@@ -372,85 +368,15 @@ final class SettingsStore: ObservableObject {
         config.isValid && credentials != nil
     }
 
-    @MainActor
-    private func autoReconnectIfNeeded() async {
-        if Task.isCancelled { return }
 
-        guard config.isValid, credentials != nil else {
-            connectionStatus = .notConfigured
-            lastConnectionSucceeded = false
-            return
-        }
-
-        await performReconnect()
-    }
-
-    @MainActor
-    private func performReconnect(maxAttempts: Int = 3) async {
-        if isTestingConnection { return }
-        if Task.isCancelled { return }
-
-        guard config.isValid, let creds = credentials else {
-            connectionStatus = .notConfigured
-            lastConnectionSucceeded = false
-            return
-        }
-
-        connectionStatus = .connecting
-        lastConnectionSucceeded = false
-
-        var lastStatus: SMBConnectionStatus = .unknown
-
-        for attempt in 1...maxAttempts {
-            if Task.isCancelled { return }
-
-            let status = await smbClient.connectionStatus(host: host, sharePath: sharePath, credentials: creds)
-            if Task.isCancelled { return }
-
-            connectionStatus = status
-            lastStatus = status
-
-            switch status {
-            case .ready, .authenticated:
-                do {
-                    try await smbClient.probeWrite(host: host, sharePath: sharePath, credentials: creds)
-                    if Task.isCancelled { return }
-                    connectionStatus = .authenticated
-                    connectionError = nil
-                    lastConnectionSucceeded = true
-                    return
-                } catch {
-                    if Task.isCancelled { return }
-                    connectionError = (error as NSError).localizedDescription
-                    lastConnectionSucceeded = false
-                    connectionStatus = .failed(connectionError ?? "")
-                }
-            default:
-                lastConnectionSucceeded = false
-            }
-
-            if attempt < maxAttempts {
-                let maxBackoffSeconds = UInt64.max / 1_000_000_000
-                let maxBackoffExponent = (UInt64.bitWidth - 1) - maxBackoffSeconds.leadingZeroBitCount
-                let exponent = min(attempt - 1, maxBackoffExponent)
-                let backoffSeconds = UInt64(1) << exponent
-                let backoffNanoseconds = backoffSeconds * 1_000_000_000
-                try? await Task.sleep(nanoseconds: backoffNanoseconds)
-                if Task.isCancelled { return }
-            }
-        }
-
-        connectionStatus = lastStatus
-    }
 
     @MainActor
     func reconnectOnForeground() {
-        requestReconnect()
+        connectionService.requestReconnect(host: host, sharePath: sharePath, credentials: credentials, initialDelay: .milliseconds(200))
     }
 
     func clearCredentials() {
-        reconnectTask?.cancel()
-        reconnectTask = nil
+        connectionService.cancelReconnect()
         setSecureValue(nil, forKey: Keys.password)
         securePasswordDirty = false
         password = ""
@@ -470,16 +396,12 @@ final class SettingsStore: ObservableObject {
 
     private func setSecureValue(_ value: String?, forKey key: String) {
         do {
-            if let value = value, !value.isEmpty {
-                try KeychainStorage.save(value, forKey: key)
-            } else {
-                try KeychainStorage.deleteValue(forKey: key)
-            }
+            try repository.saveSecure(value, forKey: key)
 
             if key == Keys.password {
-                savedPasswordCache = KeychainStorage.string(forKey: key)
+                savedPasswordCache = repository.secureString(forKey: key)
             } else if key == Keys.encryptionPassword {
-                savedEncryptionPasswordCache = KeychainStorage.string(forKey: key)
+                savedEncryptionPasswordCache = repository.secureString(forKey: key)
             }
         } catch {
             NSLog("Keychain error for %{public}@ - %{public}@", key, String(describing: error))
@@ -487,15 +409,12 @@ final class SettingsStore: ObservableObject {
     }
 }
 
-private extension UserDefaults {
-    func bool(forKey key: String, defaultValue: Bool) -> Bool {
-        object(forKey: key) == nil ? defaultValue : bool(forKey: key)
+extension SettingsStore: SettingsStoreProtocol {
+    var autoUploadEnabledPublisher: AnyPublisher<Bool, Never> {
+        $autoUploadEnabled.eraseToAnyPublisher()
     }
 
-    func `enum`<T>(forKey key: String, defaultValue: T) -> T where T: RawRepresentable, T.RawValue == String {
-        if let rawValue = string(forKey: key), let value = T(rawValue: rawValue) {
-            return value
-        }
-        return defaultValue
+    var uploadSchedulePublisher: AnyPublisher<UploadSchedule, Never> {
+        $uploadSchedule.eraseToAnyPublisher()
     }
 }

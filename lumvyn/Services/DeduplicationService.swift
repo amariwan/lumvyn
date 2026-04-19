@@ -125,71 +125,55 @@ public actor DeduplicationService {
             resource = resources.first!
         }
 
-        let tmpURL = FileManager.default.temporaryDirectory.appendingPathComponent(
-            "\(UUID().uuidString)_\(resource.originalFilename)")
-        try? FileManager.default.removeItem(at: tmpURL)
-
         let resourceOptions = PHAssetResourceRequestOptions()
         resourceOptions.isNetworkAccessAllowed = true
 
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            PHAssetResourceManager.default().writeData(for: resource, toFile: tmpURL, options: resourceOptions) { error in
-                if let error {
-                    continuation.resume(throwing: error)
-                } else {
-                    continuation.resume(returning: ())
+        // 1) file-byte SHA256 computed by streaming data (avoids temp file I/O)
+        let fileHex: String = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<String, Error>) in
+            var ctx = SHA256()
+            PHAssetResourceManager.default().requestData(for: resource, options: resourceOptions, dataReceivedHandler: { data in
+                ctx.update(data: data)
+            }, completionHandler: { error in
+                if let error = error {
+                    cont.resume(throwing: error)
+                    return
                 }
-            }
+                let hex = ctx.finalize().map { String(format: "%02x", $0) }.joined()
+                cont.resume(returning: hex)
+            })
         }
 
-        return try await Task.detached(priority: .utility) {
-            defer { try? FileManager.default.removeItem(at: tmpURL) }
+        var variants: [String] = []
+        variants.append(fileHex)
+        dedupLogger.debug("Computed file fingerprint for asset \(asset.localIdentifier): \(fileHex)")
 
-            var variants: [String] = []
-
-            // 1) file-byte SHA256
+        // 2) normalized pixel SHA256 for images (best-effort) — request a thumbnail image rather
+        // than writing the full resource to disk to reduce memory and I/O.
+        if asset.mediaType == .image {
             do {
-                guard let stream = InputStream(url: tmpURL) else {
-                    throw DeduplicationError.hashingFailed
+                let imageData: Data? = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Data?, Error>) in
+                    var completed = false
+                    let opts = PHImageRequestOptions()
+                    opts.isNetworkAccessAllowed = true
+                    opts.deliveryMode = .highQualityFormat
+                    opts.isSynchronous = false
+
+                    PHImageManager.default().requestImageDataAndOrientation(for: asset, options: opts) { data, _, _, info in
+                        if completed { return }
+                        if let degraded = info?[PHImageResultIsDegradedKey] as? Bool, degraded { return }
+                        completed = true
+                        cont.resume(returning: data)
+                    }
                 }
 
-                stream.open()
-                defer { stream.close() }
+                if let data = imageData, let source = CGImageSourceCreateWithData(data as CFData, nil) {
+                    let thumbOpts = [
+                        kCGImageSourceCreateThumbnailFromImageIfAbsent: true,
+                        kCGImageSourceThumbnailMaxPixelSize: 512,
+                        kCGImageSourceCreateThumbnailWithTransform: true
+                    ] as CFDictionary
 
-                var context = SHA256()
-                let bufferSize = 64 * 1024
-                let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-                defer { buffer.deallocate() }
-
-                while stream.hasBytesAvailable {
-                    let read = stream.read(buffer, maxLength: bufferSize)
-                    if read < 0 { throw DeduplicationError.hashingFailed }
-                    if read == 0 { break }
-                    context.update(data: Data(bytes: buffer, count: read))
-                }
-
-                let fileHex = context.finalize().map { String(format: "%02x", $0) }.joined()
-                variants.append(fileHex)
-                dedupLogger.debug("Computed file fingerprint for asset \(asset.localIdentifier): \(fileHex)")
-            } catch {
-                dedupLogger.error("File hashing failed for asset \(asset.localIdentifier): \(error.localizedDescription)")
-                throw error
-            }
-
-            // 2) normalized pixel SHA256 for images (best-effort)
-            if asset.mediaType == .image {
-                do {
-                    if let source = CGImageSourceCreateWithURL(tmpURL as CFURL, nil) {
-                        let thumbOpts = [
-                            kCGImageSourceCreateThumbnailFromImageIfAbsent: true,
-                            kCGImageSourceThumbnailMaxPixelSize: 512,
-                            kCGImageSourceCreateThumbnailWithTransform: true
-                        ] as CFDictionary
-
-                        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOpts) ?? CGImageSourceCreateImageAtIndex(source, 0, nil) else {
-                            throw DeduplicationError.hashingFailed
-                        }
-
+                    if let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOpts) ?? CGImageSourceCreateImageAtIndex(source, 0, nil) {
                         let width = cgImage.width
                         let height = cgImage.height
                         let bytesPerPixel = 4
@@ -208,18 +192,18 @@ public actor DeduplicationService {
 
                         ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
 
-                        let data = Data(bytes: buffer, count: totalBytes)
-                        let imgHex = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+                        let pixelData = Data(bytes: buffer, count: totalBytes)
+                        let imgHex = SHA256.hash(data: pixelData).map { String(format: "%02x", $0) }.joined()
                         variants.append(imgHex)
                         dedupLogger.debug("Computed image fingerprint for asset \(asset.localIdentifier): \(imgHex)")
                     }
-                } catch {
-                    dedupLogger.debug("Image fingerprinting failed for asset \(asset.localIdentifier): \(error.localizedDescription)")
                 }
+            } catch {
+                dedupLogger.debug("Image fingerprinting failed for asset \(asset.localIdentifier): \(error.localizedDescription)")
             }
+        }
 
-            return variants
-        }.value
+        return variants
     }
 
     public func fingerprint(for asset: PHAsset) async throws -> String {

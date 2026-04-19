@@ -13,7 +13,7 @@ final class GalleryStore: ObservableObject {
     @Published var activeFilters: GalleryFilters = .default
 
     private let service: GalleryService
-    private let settingsStore: SettingsStore
+    private let settingsStore: SettingsStoreProtocol
 
     private var assetCache: [String: [RemoteAsset]] = [:]
     private var subfolderCache: [String: [RemoteAlbum]] = [:]
@@ -25,7 +25,7 @@ final class GalleryStore: ObservableObject {
     }()
     private var thumbnailTasks: [String: Task<Data?, Never>] = [:]
 
-    init(service: GalleryService, settingsStore: SettingsStore) {
+    init(service: GalleryService, settingsStore: SettingsStoreProtocol) {
         self.service = service
         self.settingsStore = settingsStore
     }

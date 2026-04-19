@@ -18,7 +18,7 @@ final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
     private let persistenceURL: URL
     private let cacheDirectory: URL
     private let smbClient: SMBClientProtocol
-    private let settingsStore: SettingsStore
+    private let settingsStore: SettingsStoreProtocol
     private let deduplicationService: DeduplicationService?
     private let remoteIndex: RemoteIndexStore?
     private let remoteDeletionQueue: RemoteDeletionQueue?
@@ -29,7 +29,7 @@ final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
     private var processingTask: Task<Void, Never>?
     private let networkMonitor = NetworkMonitor.shared
     private weak var photoLibraryWatcher: PhotoLibraryWatcher?
-    init(smbClient: SMBClientProtocol, settingsStore: SettingsStore, watcher: PhotoLibraryWatcher? = nil, deduplicationService: DeduplicationService? = nil, remoteIndex: RemoteIndexStore? = nil, remoteDeletionQueue: RemoteDeletionQueue? = nil, inAppNotifications: InAppNotificationCenter? = nil) {
+    init(smbClient: SMBClientProtocol, settingsStore: SettingsStoreProtocol, watcher: PhotoLibraryWatcher? = nil, deduplicationService: DeduplicationService? = nil, remoteIndex: RemoteIndexStore? = nil, remoteDeletionQueue: RemoteDeletionQueue? = nil, inAppNotifications: InAppNotificationCenter? = nil) {
         self.smbClient = smbClient
         self.settingsStore = settingsStore
         self.deduplicationService = deduplicationService
@@ -88,14 +88,14 @@ final class UploadQueueManager: ObservableObject, PhotoLibraryWatcherDelegate {
             }
             .store(in: &cancellables)
 
-        settingsStore.$autoUploadEnabled
+        settingsStore.autoUploadEnabledPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 Task { await self?.autoResumeProcessingIfNeeded() }
             }
             .store(in: &cancellables)
 
-        settingsStore.$uploadSchedule
+        settingsStore.uploadSchedulePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 Task { await self?.autoResumeProcessingIfNeeded() }

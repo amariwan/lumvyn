@@ -32,7 +32,7 @@ final class ReadinessChecker: ObservableObject {
     @Published var items: [ReadinessItem] = []
     @Published var isChecking = true
 
-    func run(settingsStore: SettingsStore) async {
+    func run(settingsStore: SettingsStoreProtocol) async {
         isChecking = true
         items = initialItems()
 
@@ -98,7 +98,7 @@ final class ReadinessChecker: ObservableObject {
         }
     }
 
-    private func checkSMBConfig(_ store: SettingsStore) {
+    private func checkSMBConfig(_ store: SettingsStoreProtocol) {
         let configured = store.config.isValid && store.credentials != nil
         updateItem(id: "smb", status: configured
             ? .ok
